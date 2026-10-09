@@ -14,8 +14,6 @@ from rembg import remove
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
-import subprocess
-
 # =============================================================
 # Configuration
 # =============================================================
@@ -46,17 +44,31 @@ def configure_camera(camera):
         context = gp.Context()
 
         # -----------------------------------------------------
-        # Exposure mode: Manual
+        # Set ISO to 200
         # -----------------------------------------------------
+        print("Setting ISO to 200")
 
-        config = camera.get_config(context)
-        capture_settings = config.get_child_by_name("capturesettings")
+        try:
+            config = camera.get_config(context)
+            capture_settings = config.get_child_by_name("imgsettings")
+            iso_widget = capture_settings.get_child_by_name("iso")
 
-        widget = capture_settings.get_child_by_name("expprogram")
-        print("Setting Exposure Program to M")
-        widget.set_value("M")
+            iso_widget.set_value("200")
+            camera.set_config(config, context)
 
-        camera.set_config(config, context)
+            time.sleep(0.3)
+
+            # Verify ISO
+            config = camera.get_config(context)
+            capture_settings = config.get_child_by_name("imgsettings")
+            iso_widget = capture_settings.get_child_by_name("iso")
+
+            actual_iso = iso_widget.get_value()
+            print(f"ISO reported by camera: {actual_iso}")
+
+        except gp.GPhoto2Error as e:
+            print(f"Could not set ISO: {e}")
+
 
         # -----------------------------------------------------
         # Aperture: f/8
@@ -104,7 +116,7 @@ def configure_camera(camera):
             ("Exposure", "expprogram"),
             ("Aperture", "f-number"),
             ("Shutter", "shutterspeed"),
-            ("Flash", "nikonflashmode"),
+            ("Flash", "nikonflashmode")
         ):
             value = capture_settings.get_child_by_name(widget_name).get_value()
             print(f"  {label}: {value}")
@@ -513,8 +525,6 @@ def capture_photo(camera):
 
         # Give the camera a brief moment before triggering the shutter.
         time.sleep(0.3)
-
-        print("Capturing photo...")
 
         # -----------------------------------------------------
         # Capture actual photo

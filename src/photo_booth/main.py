@@ -388,6 +388,89 @@ def draw_gesture_progress(frame, hand_landmarks, progress):
         )
 
 
+def is_finger_up(hand_landmarks, finger_tip, finger_pip):
+    """Check whether a finger is raised."""
+
+    return (
+        hand_landmarks[finger_tip].y
+        < hand_landmarks[finger_pip].y
+    )
+
+def is_one_finger_up(hand_landmarks):
+    """
+    Detect one finger pointing upward.
+    Adjusts for hands appearing at different distances from the camera.
+    """
+
+    landmarks = hand_landmarks
+
+    # Index finger landmarks
+    wrist = landmarks[0]
+    index_tip = landmarks[8]
+    index_pip = landmarks[6]
+    index_mcp = landmarks[5]
+
+    # Other fingers must be folded
+    middle_up = is_finger_up(landmarks, 12, 10)
+    ring_up = is_finger_up(landmarks, 16, 14)
+    pinky_up = is_finger_up(landmarks, 20, 18)
+
+    # Check that the index finger is extended
+    finger_extended = (
+        index_tip.y < index_pip.y
+        and index_pip.y < index_mcp.y
+    )
+
+    # Calculate hand size using the wrist-to-middle-finger-base distance
+    hand_size = (
+        (landmarks[9].x - wrist.x) ** 2
+        + (landmarks[9].y - wrist.y) ** 2
+    ) ** 0.5
+
+    if hand_size < 0.001:
+        return False
+
+    # Require sufficient extension relative to hand size
+    finger_length = index_mcp.y - index_tip.y
+    pointing_up = finger_length / hand_size > 0.8
+
+    # Ensure the finger points mostly upward
+    vertical_distance = abs(index_tip.y - index_mcp.y)
+    horizontal_distance = abs(index_tip.x - index_mcp.x)
+
+    pointing_vertical = (
+        horizontal_distance < vertical_distance * 0.75
+    )
+
+    return (
+        finger_extended
+        and pointing_up
+        and pointing_vertical
+        and not middle_up
+        and not ring_up
+        and not pinky_up
+    )
+
+def is_two_fingers_up(hand_landmarks):
+    """
+    Detect whether the index and middle fingers are raised.
+    """
+    index_up = is_finger_up(hand_landmarks, 8, 6)
+    middle_up = is_finger_up(hand_landmarks, 12, 10)
+
+    return index_up and middle_up
+
+
+def is_three_fingers_up(hand_landmarks):
+    """
+    Detect whether the index, middle, and ring fingers are raised.
+    """
+    index_up = is_finger_up(hand_landmarks, 8, 6)
+    middle_up = is_finger_up(hand_landmarks, 12, 10)
+    ring_up = is_finger_up(hand_landmarks, 16, 14)
+
+    return index_up and middle_up and ring_up
+
 # =============================================================
 # Create MediaPipe hand detector
 # =============================================================
@@ -775,7 +858,7 @@ def stream_live_view():
                         results.hand_landmarks[0]
                     )
 
-                    open_hand = is_open_hand(
+                    open_hand = is_one_finger_up(
                         hand_landmarks
                     )
 

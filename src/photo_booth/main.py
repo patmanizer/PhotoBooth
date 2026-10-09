@@ -14,6 +14,7 @@ from rembg import remove
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
+import subprocess
 
 # =============================================================
 # Configuration
@@ -91,8 +92,8 @@ def configure_camera(camera):
         capture_settings = config.get_child_by_name("capturesettings")
 
         widget = capture_settings.get_child_by_name("nikonflashmode")
-        print("Setting Nikon Flash Mode to TTL")
-        widget.set_value("TTL")
+        print("Nikon Flash Mode set to iTTL")
+        widget.set_value("iTTL")
 
         camera.set_config(config, context)
 
@@ -113,47 +114,6 @@ def configure_camera(camera):
         print(
             f"Could not configure camera: {e}"
         )
-
-def autofocus(camera, context):
-
-    try:
-
-        config = camera.get_config(context)
-
-        autofocus_widget = (
-            config.get_child_by_name("autofocusdrive")
-        )
-
-        if autofocus_widget is None:
-            print("Autofocus control not found")
-            return False
-
-        print("Triggering autofocus...")
-
-        # Some cameras expose this as a toggle/action widget.
-        # Setting it to 1 triggers autofocus.
-        autofocus_widget.set_value(1)
-
-        camera.set_config(
-            config,
-            context
-        )
-
-        # Give the D7000 time to focus.
-        time.sleep(1.0)
-
-        print("Autofocus complete.")
-
-        return True
-
-    except gp.GPhoto2Error as e:
-
-        print(
-            f"Autofocus error: {e}"
-        )
-
-        return False
-
 
 
 # =============================================================
@@ -466,24 +426,42 @@ def create_hand_detector():
 
     return detector
 
-
 def autofocus(camera, context):
+    """
+    Trigger autofocus on the Nikon D7000 using python-gphoto2.
+    """
     try:
-        config = camera.get_config(context)
+        print("Reading autofocus control...")
 
-        autofocus_widget = config.get_child_by_name("autofocusdrive")
+        # Retrieve the actual configuration widget.
+        widget = camera.get_single_config("autofocusdrive", context)
 
-        if autofocus_widget is not None:
-            autofocus_widget.set_value(1)
-            camera.set_config(config, context)
-            print("Autofocus triggered")
-            time.sleep(0.5)
-        else:
-            print("Autofocus control not found")
+        print(f"Autofocus widget: {widget.get_name()}")
+        print(f"Widget type: {widget.get_type()}")
+        print(f"Current value: {widget.get_value()}")
+
+        # Trigger autofocus.
+        widget.set_value(1)
+
+        print("Sending autofocus command...")
+
+        camera.set_single_config(
+            "autofocusdrive",
+            widget,
+            context
+        )
+
+        print("Autofocus command accepted.")
+        time.sleep(1.0)
+        return True
 
     except gp.GPhoto2Error as e:
-        print(f"Autofocus error: {e}")
+        print(f"gphoto2 autofocus error: {e}")
+        return False
 
+    except Exception as e:
+        print(f"Unexpected autofocus error: {e}")
+        return False
 
 # =============================================================
 # Capture photo
@@ -500,6 +478,18 @@ def capture_photo(camera):
 
     try:
 
+        # -----------------------------------------------------
+        # Reset camera connection before autofocus
+        # -----------------------------------------------------
+
+        print("Reinitializing Nikon camera...")
+
+        camera.exit()
+        time.sleep(0.5)
+
+        camera.init()
+        time.sleep(0.5)
+
         configure_camera(camera)
 
         # -----------------------------------------------------
@@ -513,18 +503,18 @@ def capture_photo(camera):
             context
         )
 
-        if not autofocus_success:
-
+        if autofocus_success:
+            print("Autofocus command sent successfully.")
+        else:
             print(
-                "Autofocus failed. "
+                "Autofocus command failed. "
                 "Continuing with capture..."
             )
 
-        # -----------------------------------------------------
-        # Small delay before shutter
-        # -----------------------------------------------------
-
+        # Give the camera a brief moment before triggering the shutter.
         time.sleep(0.3)
+
+        print("Capturing photo...")
 
         # -----------------------------------------------------
         # Capture actual photo

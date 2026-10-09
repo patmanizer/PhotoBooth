@@ -10,6 +10,39 @@ def is_finger_up(hand_landmarks, finger_tip, finger_pip):
     )
 
 
+def is_thumb_extended(hand_landmarks):
+    """Check for thumb extension along the palm's thumb-side axis."""
+
+    index_mcp = hand_landmarks[5]
+    pinky_mcp = hand_landmarks[17]
+    thumb_ip = hand_landmarks[3]
+    thumb_tip = hand_landmarks[4]
+
+    palm_axis = (
+        index_mcp.x - pinky_mcp.x,
+        index_mcp.y - pinky_mcp.y,
+        index_mcp.z - pinky_mcp.z,
+    )
+    palm_width = sum(component ** 2 for component in palm_axis) ** 0.5
+    if palm_width < 0.001:
+        return False
+
+    tip_from_ip = (
+        thumb_tip.x - thumb_ip.x,
+        thumb_tip.y - thumb_ip.y,
+        thumb_tip.z - thumb_ip.z,
+    )
+    outward_extension = sum(
+        thumb_component * palm_component
+        for thumb_component, palm_component in zip(
+            tip_from_ip,
+            palm_axis,
+        )
+    ) / palm_width
+
+    return outward_extension > palm_width * 0.05
+
+
 def is_one_finger_up(hand_landmarks):
     """
     Detect one finger pointing upward.
@@ -28,6 +61,9 @@ def is_one_finger_up(hand_landmarks):
     middle_up = is_finger_up(landmarks, 12, 10)
     ring_up = is_finger_up(landmarks, 16, 14)
     pinky_up = is_finger_up(landmarks, 20, 18)
+
+    if is_thumb_extended(landmarks):
+        return False
 
     # Index finger must be extended.
     finger_extended = (
@@ -71,6 +107,9 @@ def is_one_finger_up(hand_landmarks):
 def is_two_fingers_up(hand_landmarks):
     """Detect the index and middle fingers raised."""
 
+    if is_thumb_extended(hand_landmarks):
+        return False
+
     index_up = is_finger_up(hand_landmarks, 8, 6)
     middle_up = is_finger_up(hand_landmarks, 12, 10)
     ring_up = is_finger_up(hand_landmarks, 16, 14)
@@ -80,14 +119,20 @@ def is_two_fingers_up(hand_landmarks):
 
 
 def is_three_fingers_up(hand_landmarks):
-    """Detect the index, middle, and ring fingers raised."""
+    """Detect either supported three-finger combination."""
+
+    if is_thumb_extended(hand_landmarks):
+        return False
 
     index_up = is_finger_up(hand_landmarks, 8, 6)
     middle_up = is_finger_up(hand_landmarks, 12, 10)
     ring_up = is_finger_up(hand_landmarks, 16, 14)
     pinky_up = is_finger_up(hand_landmarks, 20, 18)
 
-    return index_up and middle_up and ring_up and not pinky_up
+    return (
+        (index_up and middle_up and ring_up and not pinky_up)
+        or (not index_up and middle_up and ring_up and pinky_up)
+    )
 
 
 def get_raised_finger_count(hand_landmarks):
@@ -146,13 +191,7 @@ def is_open_hand(hand_landmarks):
     # --------------------------------------------------
     # 2. Thumb must be extended.
     # --------------------------------------------------
-    thumb_tip = hand_landmarks[4]
-    thumb_ip = hand_landmarks[3]
-
-    if (
-        distance_3d(thumb_tip, wrist)
-        <= distance_3d(thumb_ip, wrist) * 1.05
-    ):
+    if not is_thumb_extended(hand_landmarks):
         return False
 
     # --------------------------------------------------

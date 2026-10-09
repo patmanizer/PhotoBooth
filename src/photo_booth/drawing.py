@@ -72,7 +72,12 @@ def draw_hand(frame, hand_landmarks):
         )
 
 
-def draw_gesture_progress(frame, hand_landmarks, progress):
+def draw_gesture_progress(
+    frame,
+    hand_landmarks,
+    progress,
+    finger_count,
+):
     """Draw a circular gesture-hold progress indicator."""
 
     height, width, _ = frame.shape
@@ -96,7 +101,7 @@ def draw_gesture_progress(frame, hand_landmarks, progress):
     )
 
     radius = max(
-        12,
+        32,
         int(
             max(
                 (
@@ -104,11 +109,11 @@ def draw_gesture_progress(frame, hand_landmarks, progress):
                     + (point[1] - center[1]) ** 2
                 ) ** 0.5
                 for point in palm_points
-            ) * 0.8
+            ) * 1.25
         ),
     )
 
-    thickness = max(5, radius // 2)
+    thickness = max(6, radius // 5)
 
     cv2.circle(
         frame,
@@ -129,5 +134,30 @@ def draw_gesture_progress(frame, hand_landmarks, progress):
             -90 + int(360 * progress),
             (0, 255, 0),
             thickness,
+            cv2.LINE_AA,
+        )
+
+    if finger_count is not None:
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = max(1.0, radius / 20)
+        text = str(finger_count)
+        (text_width, text_height), _ = cv2.getTextSize(
+            text,
+            font,
+            font_scale,
+            max(2, radius // 12),
+        )
+        text_origin = (
+            center[0] - text_width // 2,
+            center[1] + text_height // 2,
+        )
+        cv2.putText(
+            frame,
+            text,
+            text_origin,
+            font,
+            font_scale,
+            (255, 255, 255),
+            2,
             cv2.LINE_AA,
         )

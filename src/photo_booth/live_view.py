@@ -117,6 +117,7 @@ def stream_live_view():
                         frame,
                         hand_landmarks,
                         0.0,
+                        detected_finger_count,
                     )
 
                 # ------------------------------------------
@@ -143,6 +144,7 @@ def stream_live_view():
                             frame,
                             hand_landmarks,
                             progress,
+                            detected_finger_count,
                         )
 
                     if elapsed >= GESTURE_HOLD_TIME:

@@ -1,0 +1,7 @@
+gphoto2
+rawpy
+Pillow
+rembg
+numpy
+mediapipe
+opencv-python

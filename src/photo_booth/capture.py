@@ -4,6 +4,7 @@ import io
 import os
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from datetime import datetime
 
 import gphoto2 as gp
 import rawpy
@@ -33,7 +34,7 @@ def _process_captured_image(image_data, original_extension):
 
     image_without_background = remove(image_data_for_rembg)
 
-    capture_timestamp = time.strftime("%Y%m%d_%H%M%S")
+    capture_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     output_path = CAPTURE_FOLDER / f"{capture_timestamp}_transparent.png"
 
     with open(output_path, "wb") as output_file:

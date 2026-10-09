@@ -11,7 +11,7 @@ import numpy as np
 from .capture import capture_photo
 from .config import GESTURE_HOLD_TIME
 from .drawing import draw_gesture_progress
-from .gestures import is_one_finger_up
+from .gestures import get_raised_finger_count
 from .hand_detector import create_hand_detector
 
 
@@ -45,7 +45,8 @@ def stream_live_view():
         # Gesture state.
         # --------------------------------------------------
         gesture_start = None
-        gesture_triggered = False
+        gesture_finger_count = None
+        gesture_capture_count = None
 
         live_view_active = True
         frame_timestamp_ms = 0
@@ -96,7 +97,7 @@ def stream_live_view():
                     frame_timestamp_ms,
                 )
 
-                gesture_detected = False
+                detected_finger_count = None
                 hand_landmarks = None
 
                 # ------------------------------------------
@@ -108,7 +109,7 @@ def stream_live_view():
                     # for the first detected hand.
                     hand_landmarks = results.hand_landmarks[0]
 
-                    gesture_detected = is_one_finger_up(
+                    detected_finger_count = get_raised_finger_count(
                         hand_landmarks
                     )
 
@@ -121,9 +122,13 @@ def stream_live_view():
                 # ------------------------------------------
                 # Gesture hold timer.
                 # ------------------------------------------
-                if gesture_detected and not gesture_triggered:
+                if (
+                    detected_finger_count is not None
+                    and gesture_capture_count is None
+                ):
 
-                    if gesture_start is None:
+                    if detected_finger_count != gesture_finger_count:
+                        gesture_finger_count = detected_finger_count
                         gesture_start = time.time()
 
                     elapsed = time.time() - gesture_start
@@ -142,15 +147,18 @@ def stream_live_view():
 
                     if elapsed >= GESTURE_HOLD_TIME:
 
-                        print("One-finger gesture triggered!")
+                        print(
+                            f"{detected_finger_count}-finger gesture "
+                            "triggered!"
+                        )
 
-                        gesture_triggered = True
+                        gesture_capture_count = detected_finger_count
                         gesture_start = None
 
-                elif not gesture_detected:
+                else:
 
                     gesture_start = None
-                    gesture_triggered = False
+                    gesture_finger_count = None
 
                 # ------------------------------------------
                 # Display live view.
@@ -165,11 +173,13 @@ def stream_live_view():
             # --------------------------------------------------
             key = cv2.waitKey(1) & 0xFF
 
-            # Spacebar or gesture triggers a capture.
-            if key == ord(" ") or gesture_triggered:
+            # Spacebar captures once; gestures capture once per raised finger.
+            if key == ord(" ") or gesture_capture_count is not None:
 
-                gesture_triggered = False
+                capture_count = gesture_capture_count or 1
+                gesture_capture_count = None
                 gesture_start = None
+                gesture_finger_count = None
 
                 # Stop live view.
                 live_view_active = False
@@ -179,7 +189,8 @@ def stream_live_view():
                 time.sleep(0.2)
 
                 # Capture photo.
-                capture_photo(camera, image_executor)
+                for _ in range(capture_count):
+                    capture_photo(camera, image_executor)
 
                 # Resume live view.
                 print("Resuming live view...")

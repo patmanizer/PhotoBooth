@@ -73,8 +73,10 @@ def is_two_fingers_up(hand_landmarks):
 
     index_up = is_finger_up(hand_landmarks, 8, 6)
     middle_up = is_finger_up(hand_landmarks, 12, 10)
+    ring_up = is_finger_up(hand_landmarks, 16, 14)
+    pinky_up = is_finger_up(hand_landmarks, 20, 18)
 
-    return index_up and middle_up
+    return index_up and middle_up and not ring_up and not pinky_up
 
 
 def is_three_fingers_up(hand_landmarks):
@@ -83,8 +85,21 @@ def is_three_fingers_up(hand_landmarks):
     index_up = is_finger_up(hand_landmarks, 8, 6)
     middle_up = is_finger_up(hand_landmarks, 12, 10)
     ring_up = is_finger_up(hand_landmarks, 16, 14)
+    pinky_up = is_finger_up(hand_landmarks, 20, 18)
 
-    return index_up and middle_up and ring_up
+    return index_up and middle_up and ring_up and not pinky_up
+
+
+def get_raised_finger_count(hand_landmarks):
+    """Return the supported raised-finger gesture count, if any."""
+
+    if is_one_finger_up(hand_landmarks):
+        return 1
+    if is_two_fingers_up(hand_landmarks):
+        return 2
+    if is_three_fingers_up(hand_landmarks):
+        return 3
+    return None
 
 
 def is_open_hand(hand_landmarks):

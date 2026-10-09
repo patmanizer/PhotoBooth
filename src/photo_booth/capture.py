@@ -3,6 +3,7 @@
 import io
 import os
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
 
 import gphoto2 as gp
 import rawpy
@@ -13,8 +14,45 @@ from .camera import autofocus, configure_camera
 from .config import CAPTURE_FOLDER
 
 
-def capture_photo(camera):
-    """Capture a photo and save a transparent PNG."""
+def _process_captured_image(image_data, original_extension):
+    """Convert a captured image and remove its background."""
+
+    if original_extension.lower() in (".nef", ".nrw"):
+        with rawpy.imread(io.BytesIO(image_data)) as raw_image:
+            full_resolution_image = raw_image.postprocess()
+
+        jpeg_buffer = io.BytesIO()
+        Image.fromarray(full_resolution_image).save(
+            jpeg_buffer,
+            format="JPEG",
+            quality=95,
+        )
+        image_data_for_rembg = jpeg_buffer.getvalue()
+    else:
+        image_data_for_rembg = image_data
+
+    image_without_background = remove(image_data_for_rembg)
+
+    capture_timestamp = time.strftime("%Y%m%d_%H%M%S")
+    output_path = CAPTURE_FOLDER / f"{capture_timestamp}_transparent.png"
+
+    with open(output_path, "wb") as output_file:
+        output_file.write(image_without_background)
+
+    return output_path
+
+
+def _report_processing_result(future: Future):
+    try:
+        output_path = future.result()
+    except Exception as exc:
+        print(f"Image processing error: {exc}")
+    else:
+        print(f"Background-removed image saved to: {output_path}")
+
+
+def capture_photo(camera, image_executor: ThreadPoolExecutor):
+    """Capture a photo and queue image processing in the background."""
 
     context = gp.Context()
     CAPTURE_FOLDER.mkdir(parents=True, exist_ok=True)
@@ -83,59 +121,13 @@ def capture_photo(camera):
             or ".jpg"
         )
 
-        # --------------------------------------------------
-        # Convert Nikon RAW to JPEG if necessary.
-        # --------------------------------------------------
-        print("Preparing image for background removal...")
-
-        if original_extension.lower() in (".nef", ".nrw"):
-            with rawpy.imread(
-                io.BytesIO(image_data)
-            ) as raw_image:
-                full_resolution_image = raw_image.postprocess()
-
-            jpeg_buffer = io.BytesIO()
-
-            Image.fromarray(
-                full_resolution_image
-            ).save(
-                jpeg_buffer,
-                format="JPEG",
-                quality=95,
-            )
-
-            image_data_for_rembg = jpeg_buffer.getvalue()
-
-        else:
-            image_data_for_rembg = image_data
-
-        # --------------------------------------------------
-        # Remove background.
-        # --------------------------------------------------
-        print("Removing background...")
-
-        image_without_background = remove(
-            image_data_for_rembg
+        print("Photo captured; processing in the background...")
+        image_future = image_executor.submit(
+            _process_captured_image,
+            image_data,
+            original_extension,
         )
-
-        # --------------------------------------------------
-        # Save transparent PNG.
-        # --------------------------------------------------
-        capture_timestamp = time.strftime(
-            "%Y%m%d_%H%M%S"
-        )
-
-        output_path = CAPTURE_FOLDER / (
-            f"{capture_timestamp}_transparent.png"
-        )
-
-        with open(output_path, "wb") as output_file:
-            output_file.write(image_without_background)
-
-        print(
-            "Background-removed image saved to: "
-            f"{output_path}"
-        )
+        image_future.add_done_callback(_report_processing_result)
 
         return True
 
@@ -144,5 +136,5 @@ def capture_photo(camera):
         return False
 
     except Exception as exc:
-        print(f"Image processing error: {exc}")
+        print(f"Error capturing image: {exc}")
         return False

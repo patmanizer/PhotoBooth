@@ -1,6 +1,7 @@
 """Live view and gesture-triggered capture."""
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import gphoto2 as gp
@@ -20,6 +21,7 @@ def stream_live_view():
     camera = gp.Camera()
     initialized = False
     hand_detector = None
+    image_executor = ThreadPoolExecutor(max_workers=1)
 
     try:
         # --------------------------------------------------
@@ -177,7 +179,7 @@ def stream_live_view():
                 time.sleep(0.2)
 
                 # Capture photo.
-                capture_photo(camera)
+                capture_photo(camera, image_executor)
 
                 # Resume live view.
                 print("Resuming live view...")
@@ -202,5 +204,7 @@ def stream_live_view():
 
         if initialized:
             camera.exit()
+
+        image_executor.shutdown(wait=True)
 
         print("Camera closed.")

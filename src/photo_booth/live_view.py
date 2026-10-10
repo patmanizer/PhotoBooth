@@ -11,6 +11,11 @@ import numpy as np
 from .capture import capture_photo
 from .config import GESTURE_HOLD_TIME
 from .drawing import draw_gesture_progress
+from .foregrounds import (
+    ForegroundCycler,
+    load_foreground,
+    overlay_foreground,
+)
 from .gestures import get_raised_finger_count
 from .hand_detector import create_hand_detector
 
@@ -22,6 +27,10 @@ def stream_live_view():
     initialized = False
     hand_detector = None
     image_executor = ThreadPoolExecutor(max_workers=1)
+    foreground_cycler = ForegroundCycler()
+    cached_foreground_path = None
+    cached_foreground = None
+    cached_frame_size = None
 
     try:
         # --------------------------------------------------
@@ -76,6 +85,20 @@ def stream_live_view():
 
                 if frame is None:
                     continue
+
+                frame_size = (frame.shape[1], frame.shape[0])
+                if (
+                    foreground_cycler.current_path != cached_foreground_path
+                    or frame_size != cached_frame_size
+                ):
+                    cached_foreground = load_foreground(
+                        foreground_cycler.current_path,
+                        frame_size,
+                    )
+                    cached_foreground_path = foreground_cycler.current_path
+                    cached_frame_size = frame_size
+
+                overlay_foreground(frame, cached_foreground)
 
                 # ------------------------------------------
                 # MediaPipe hand detection.
@@ -192,7 +215,13 @@ def stream_live_view():
 
                 # Capture photo.
                 for _ in range(capture_count):
-                    capture_photo(camera, image_executor)
+                    foreground_path = foreground_cycler.current_path
+                    if capture_photo(
+                        camera,
+                        image_executor,
+                        foreground_path,
+                    ):
+                        foreground_cycler.advance()
 
                 # Resume live view.
                 print("Resuming live view...")

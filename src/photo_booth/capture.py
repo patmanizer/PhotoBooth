@@ -59,8 +59,8 @@ def _next_backdrop_path():
     return backdrop_path
 
 
-def _process_captured_image(image_data, original_extension):
-    """Remove the background and composite the subject over a backdrop."""
+def _process_captured_image(image_data, original_extension, foreground_path):
+    """Remove the background and composite subject and foreground."""
 
     if original_extension.lower() in (".nef", ".nrw"):
         with rawpy.imread(io.BytesIO(image_data)) as raw_image:
@@ -90,8 +90,17 @@ def _process_captured_image(image_data, original_extension):
             method=Image.Resampling.LANCZOS,
         )
 
+    composite = Image.alpha_composite(backdrop, subject)
+
+    with Image.open(foreground_path) as foreground_image:
+        foreground = ImageOps.fit(
+            foreground_image.convert("RGBA"),
+            subject.size,
+            method=Image.Resampling.LANCZOS,
+        )
+
     output_path = CAPTURE_FOLDER / f"{capture_timestamp}_composite.png"
-    Image.alpha_composite(backdrop, subject).save(output_path)
+    Image.alpha_composite(composite, foreground).save(output_path)
 
     return output_path
 
@@ -105,7 +114,11 @@ def _report_processing_result(future: Future):
         print(f"Composited image saved to: {output_path}")
 
 
-def capture_photo(camera, image_executor: ThreadPoolExecutor):
+def capture_photo(
+    camera,
+    image_executor: ThreadPoolExecutor,
+    foreground_path,
+):
     """Capture a photo and queue image processing in the background."""
 
     context = gp.Context()
@@ -180,6 +193,7 @@ def capture_photo(camera, image_executor: ThreadPoolExecutor):
             _process_captured_image,
             image_data,
             original_extension,
+            foreground_path,
         )
         image_future.add_done_callback(_report_processing_result)
 

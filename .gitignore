@@ -1,0 +1,9 @@
+/.idea/
+/bin/
+/lib/
+resources/hand_landmarker.task
+/share/
+/captured_images
+CACHEDIR.TAG
+pyvenv.cfg
+*.pyc

@@ -5,8 +5,8 @@ from pathlib import Path
 PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_DIR.parents[1]
 
-MODEL_PATH = PROJECT_ROOT / "hand_landmarker.task"
-CAPTURE_FOLDER = PACKAGE_DIR / "captured_images"
+MODEL_PATH = PROJECT_ROOT / "resources" / "hand_landmarker.task"
+CAPTURE_FOLDER = PROJECT_ROOT / "captured_images"
 
 # Gesture settings
 GESTURE_HOLD_TIME = 2.0

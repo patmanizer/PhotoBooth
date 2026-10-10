@@ -2,21 +2,65 @@
 
 import io
 import os
+import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 
 import gphoto2 as gp
 import rawpy
-from PIL import Image
+from PIL import Image, ImageOps
 from rembg import remove
 
 from .camera import autofocus, configure_camera
-from .config import CAPTURE_FOLDER
+from .config import BACKDROP_FOLDER, CAPTURE_FOLDER
+
+_BACKDROP_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".bmp",
+    ".tif",
+    ".tiff",
+}
+_backdrop_index = 0
+_backdrop_lock = threading.Lock()
+
+
+def _next_backdrop_path():
+    """Return the next supported backdrop in alphabetical cycle order."""
+
+    global _backdrop_index
+
+    if not BACKDROP_FOLDER.is_dir():
+        raise FileNotFoundError(
+            f"Backdrop folder not found: {BACKDROP_FOLDER}"
+        )
+
+    backdrops = sorted(
+        (
+            path
+            for path in BACKDROP_FOLDER.iterdir()
+            if path.is_file()
+            and path.suffix.lower() in _BACKDROP_EXTENSIONS
+        ),
+        key=lambda path: path.name.lower(),
+    )
+    if not backdrops:
+        raise FileNotFoundError(
+            f"No supported backdrop images found in {BACKDROP_FOLDER}"
+        )
+
+    with _backdrop_lock:
+        backdrop_path = backdrops[_backdrop_index % len(backdrops)]
+        _backdrop_index += 1
+
+    return backdrop_path
 
 
 def _process_captured_image(image_data, original_extension):
-    """Convert a captured image and remove its background."""
+    """Remove the background and composite the subject over a backdrop."""
 
     if original_extension.lower() in (".nef", ".nrw"):
         with rawpy.imread(io.BytesIO(image_data)) as raw_image:
@@ -33,12 +77,21 @@ def _process_captured_image(image_data, original_extension):
         image_data_for_rembg = image_data
 
     image_without_background = remove(image_data_for_rembg)
+    backdrop_path = _next_backdrop_path()
 
     capture_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    output_path = CAPTURE_FOLDER / f"{capture_timestamp}_transparent.png"
+    with Image.open(io.BytesIO(image_without_background)) as subject_image:
+        subject = subject_image.convert("RGBA")
 
-    with open(output_path, "wb") as output_file:
-        output_file.write(image_without_background)
+    with Image.open(backdrop_path) as backdrop_image:
+        backdrop = ImageOps.fit(
+            backdrop_image.convert("RGBA"),
+            subject.size,
+            method=Image.Resampling.LANCZOS,
+        )
+
+    output_path = CAPTURE_FOLDER / f"{capture_timestamp}_composite.png"
+    Image.alpha_composite(backdrop, subject).save(output_path)
 
     return output_path
 
@@ -49,7 +102,7 @@ def _report_processing_result(future: Future):
     except Exception as exc:
         print(f"Image processing error: {exc}")
     else:
-        print(f"Background-removed image saved to: {output_path}")
+        print(f"Composited image saved to: {output_path}")
 
 
 def capture_photo(camera, image_executor: ThreadPoolExecutor):

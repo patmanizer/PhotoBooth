@@ -16,11 +16,11 @@ GESTURE_HOLD_TIME = 2.0
 
 # Capture countdown settings
 PHOTO_PROMPTS = (
-    "Strike your best red-carpet pose",
-    "Give us your movie-star smile",
-    "Show off your most dramatic look",
-    "Pose like the star of the show",
-    "Share a little Hollywood glamour",
+    "Strike your best red-carpet pose!",
+    "Give us your movie-star smile!",
+    "Show off your most dramatic look!",
+    "Pose like the star of the show!",
+    "Share a little Hollywood glamour!",
 )
 PROMPT_DISPLAY_SECONDS = 2.0
 COUNTDOWN_SECONDS = 5

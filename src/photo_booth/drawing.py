@@ -201,21 +201,20 @@ def draw_capture_countdown(frame, prompt, countdown):
     """Display the photo prompt or countdown with a cinematic overlay."""
 
     height, width = frame.shape[:2]
-    darkened_frame = frame.copy()
-    # Dim the preview so white prompt and countdown text stays legible.
-    cv2.rectangle(
-        darkened_frame,
-        (0, 0),
-        (width, height),
-        (0, 0, 0),
-        -1,
-    )
-    cv2.addWeighted(darkened_frame, 0.58, frame, 0.42, 0, frame)
-
     white = (255, 255, 255)
     center_x = width // 2
 
     if countdown is None:
+        # Dim the preview behind the prompt, but leave the numeric countdown bright.
+        darkened_frame = frame.copy()
+        cv2.rectangle(
+            darkened_frame,
+            (0, 0),
+            (width, height),
+            (0, 0, 0),
+            -1,
+        )
+        cv2.addWeighted(darkened_frame, 0.58, frame, 0.42, 0, frame)
         _draw_centered_text(
             frame,
             prompt,

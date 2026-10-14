@@ -172,7 +172,7 @@ def _create_capture_output(
     # into additional rows while the overall output remains landscape.
     columns = min(count, 3)
     rows = math.ceil(count / columns)
-    card_width = int(collage_size[0] * (0.34 if columns == 2 else 0.26))
+    card_width = int(collage_size[0] * (0.42 if columns == 2 else 0.26))
     photo_margin = max(12, card_width // 16)
     inner_width = card_width - photo_margin * 2
     inner_size = (
@@ -188,7 +188,11 @@ def _create_capture_output(
             horizontal_position = (
                 0.5
                 if row_count == 1
-                else 0.18 + 0.64 * column / (row_count - 1)
+                else (
+                    0.27 + 0.46 * column / (row_count - 1)
+                    if count == 2
+                    else 0.18 + 0.64 * column / (row_count - 1)
+                )
             )
             centers.append(
                 (

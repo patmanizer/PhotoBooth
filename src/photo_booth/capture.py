@@ -3,7 +3,7 @@
 import io
 import math
 import os
-import shutil
+import random
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -20,7 +20,9 @@ from .camera import autofocus, configure_camera
 from .foregrounds import fit_foreground
 from .config import (
     CAPTURE_FOLDER,
+    COLLAGE_BACKGROUND_FOLDER,
     INDIVIDUAL_BACKDROP_FOLDER,
+    MAIN_FOREGROUND_FOLDER,
     OUTPUT_FOLDER,
 )
 
@@ -33,8 +35,19 @@ _BACKDROP_EXTENSIONS = {
     ".tif",
     ".tiff",
 }
+_COLLAGE_BACKGROUND_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".bmp",
+    ".tif",
+    ".tiff",
+}
 _backdrop_index = 0
 _backdrop_lock = threading.Lock()
+_main_foreground_index = 0
+_main_foreground_lock = threading.Lock()
 
 
 def _next_backdrop_path():
@@ -68,11 +81,78 @@ def _next_backdrop_path():
     return backdrop_path
 
 
+def _random_collage_background_path():
+    """Choose a supported collage background image at random."""
+
+    if not COLLAGE_BACKGROUND_FOLDER.is_dir():
+        raise FileNotFoundError(
+            f"Collage background folder not found: {COLLAGE_BACKGROUND_FOLDER}"
+        )
+
+    backgrounds = [
+        path
+        for path in COLLAGE_BACKGROUND_FOLDER.iterdir()
+        if path.is_file()
+        and path.suffix.lower() in _COLLAGE_BACKGROUND_EXTENSIONS
+    ]
+    if not backgrounds:
+        raise FileNotFoundError(
+            "No supported collage background images found in "
+            f"{COLLAGE_BACKGROUND_FOLDER}"
+        )
+
+    return random.choice(backgrounds)
+
+
+def next_main_foreground_path():
+    """Return the next main foreground in alphabetical cycle order."""
+
+    global _main_foreground_index
+
+    if not MAIN_FOREGROUND_FOLDER.is_dir():
+        raise FileNotFoundError(
+            f"Main foreground folder not found: {MAIN_FOREGROUND_FOLDER}"
+        )
+
+    foregrounds = sorted(
+        (
+            path
+            for path in MAIN_FOREGROUND_FOLDER.iterdir()
+            if path.is_file()
+            and path.suffix.lower() in _BACKDROP_EXTENSIONS
+        ),
+        key=lambda path: path.name.lower(),
+    )
+    if not foregrounds:
+        raise FileNotFoundError(
+            "No supported main foreground images found in "
+            f"{MAIN_FOREGROUND_FOLDER}"
+        )
+
+    with _main_foreground_lock:
+        foreground_path = foregrounds[
+            _main_foreground_index % len(foregrounds)
+        ]
+        _main_foreground_index += 1
+
+    return foreground_path
+
+
+def _apply_main_foreground(image, foreground_path):
+    """Overlay the selected main foreground over a finished output."""
+
+    with Image.open(foreground_path) as foreground_image:
+        foreground = fit_foreground(foreground_image, image.size)
+
+    return Image.alpha_composite(image.convert("RGBA"), foreground)
+
+
 def _process_captured_image(
     image_data,
     original_extension,
     foreground_path,
     crop_to_portrait,
+    apply_individual_foreground,
 ):
     """Remove the background and composite subject and foreground."""
 
@@ -117,13 +197,14 @@ def _process_captured_image(
             method=Image.Resampling.LANCZOS,
         )
 
-    # Save only the foreground-applied photo; collage and single-shot output
-    # both reuse this file, so the foreground is never applied a second time.
-    with Image.open(foreground_path) as foreground_image:
-        foreground = fit_foreground(foreground_image, composite.size)
-
     output_path = CAPTURE_FOLDER / f"{capture_timestamp}_photo.png"
-    final_image = Image.alpha_composite(composite, foreground)
+    final_image = composite
+    if apply_individual_foreground:
+        # Burst photos include the individual foreground before collage layout.
+        with Image.open(foreground_path) as foreground_image:
+            foreground = fit_foreground(foreground_image, composite.size)
+        final_image = Image.alpha_composite(composite, foreground)
+
     final_image.save(output_path)
 
     return output_path
@@ -140,6 +221,7 @@ def _report_processing_result(future: Future):
 
 def _create_capture_output(
     image_futures: Sequence[Future[Path]],
+    main_foreground_path: Path,
 ) -> Path:
     """Save a single photo or a landscape collage of a capture sequence."""
 
@@ -152,8 +234,13 @@ def _create_capture_output(
     output_path = OUTPUT_FOLDER / f"{output_timestamp}_photo.png"
 
     if len(captures) == 1:
-        # A single capture is already the finished photo; copy it unchanged.
-        shutil.copy2(captures[0], output_path)
+        # Apply the main foreground once over the complete single-photo output.
+        with Image.open(captures[0]) as source:
+            final_image = _apply_main_foreground(
+                source.convert("RGBA"),
+                main_foreground_path,
+            )
+            final_image.save(output_path)
         return output_path
 
     # Use portrait captures as tilted prints on a landscape canvas.
@@ -161,11 +248,13 @@ def _create_capture_output(
         first = first_image.convert("RGB")
     photo_height = first.height
     collage_size = (photo_height * 3 // 2, photo_height)
-    collage = Image.new(
-        "RGB",
-        collage_size,
-        (34, 30, 28),
-    )
+    background_path = _random_collage_background_path()
+    with Image.open(background_path) as background_image:
+        collage = ImageOps.fit(
+            background_image.convert("RGB"),
+            collage_size,
+            method=Image.Resampling.LANCZOS,
+        )
 
     count = len(captures)
     # Three columns are used for bursts of three or more; extra shots wrap
@@ -256,7 +345,8 @@ def _create_capture_output(
         )
         collage.paste(rotated_photo, position, rotated_photo)
 
-    collage.save(output_path)
+    # Apply the main foreground across the completed collage, not per photo.
+    _apply_main_foreground(collage, main_foreground_path).save(output_path)
     return output_path
 
 
@@ -272,6 +362,7 @@ def _report_output_result(future: Future):
 def save_capture_output(
     image_futures: Sequence[Future[Path]],
     image_executor: ThreadPoolExecutor,
+    main_foreground_path: Path,
 ):
     """Queue output creation after the captured images are processed."""
 
@@ -283,6 +374,7 @@ def save_capture_output(
     output_future = image_executor.submit(
         _create_capture_output,
         tuple(image_futures),
+        main_foreground_path,
     )
     output_future.add_done_callback(_report_output_result)
 
@@ -292,6 +384,7 @@ def capture_photo(
     image_executor: ThreadPoolExecutor,
     foreground_path,
     crop_to_portrait=False,
+    apply_individual_foreground=True,
 ) -> Future[Path] | None:
     """Capture a photo and return its queued image-processing future."""
 
@@ -369,6 +462,7 @@ def capture_photo(
             original_extension,
             foreground_path,
             crop_to_portrait,
+            apply_individual_foreground,
         )
         image_future.add_done_callback(_report_processing_result)
 

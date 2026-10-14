@@ -11,6 +11,8 @@ CAPTURE_FOLDER = PROJECT_ROOT / "captured_images"
 OUTPUT_FOLDER = PROJECT_ROOT / "output"
 INDIVIDUAL_BACKDROP_FOLDER = PROJECT_ROOT / "resources" / "individual_backdrop"
 INDIVIDUAL_FOREGROUND_FOLDER = PROJECT_ROOT / "resources" / "individual_foreground"
+COLLAGE_BACKGROUND_FOLDER = PROJECT_ROOT / "resources" / "collage_background"
+MAIN_FOREGROUND_FOLDER = PROJECT_ROOT / "resources" / "main_foreground"
 
 # Gesture settings
 GESTURE_HOLD_TIME = 2.0

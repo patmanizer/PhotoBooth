@@ -9,7 +9,11 @@ import gphoto2 as gp
 import mediapipe as mp
 import numpy as np
 
-from .capture import capture_photo, save_capture_output
+from .capture import (
+    capture_photo,
+    next_main_foreground_path,
+    save_capture_output,
+)
 from .config import (
     COUNTDOWN_SECONDS,
     GESTURE_HOLD_TIME,
@@ -41,9 +45,9 @@ def stream_live_view():
     hand_detector = None
     image_executor = ThreadPoolExecutor(max_workers=1)
     foreground_cycler = ForegroundCycler()
-    cached_foreground_path = None
     cached_foreground = None
     cached_frame_size = None
+    cached_foreground_display_path = None
     live_view_window_open = False
 
     try:
@@ -77,6 +81,7 @@ def stream_live_view():
         # Keep the original burst size while the remaining count decreases,
         # so every preview frame in a portrait burst stays portrait-cropped.
         capture_sequence_count = None
+        capture_main_foreground_path = None
         capture_prompt = None
         countdown_started_at = None
         capture_image_futures = []
@@ -111,19 +116,26 @@ def stream_live_view():
                     # Keep preview and saved portrait captures framed alike.
                     frame = crop_frame_to_portrait(frame)
 
-                frame_size = (frame.shape[1], frame.shape[0])
-                if (
-                    foreground_cycler.current_path != cached_foreground_path
-                    or frame_size != cached_frame_size
-                ):
-                    cached_foreground = load_foreground(
-                        foreground_cycler.current_path,
-                        frame_size,
-                    )
-                    cached_foreground_path = foreground_cycler.current_path
-                    cached_frame_size = frame_size
+                foreground_display_path = None
+                if capture_sequence_count == 1:
+                    foreground_display_path = capture_main_foreground_path
+                elif capture_sequence_count in (2, 3):
+                    foreground_display_path = foreground_cycler.current_path
 
-                overlay_foreground(frame, cached_foreground)
+                if foreground_display_path is not None:
+                    frame_size = (frame.shape[1], frame.shape[0])
+                    if (
+                        foreground_display_path != cached_foreground_display_path
+                        or frame_size != cached_frame_size
+                    ):
+                        cached_foreground = load_foreground(
+                            foreground_display_path,
+                            frame_size,
+                        )
+                        cached_foreground_display_path = foreground_display_path
+                        cached_frame_size = frame_size
+
+                    overlay_foreground(frame, cached_foreground)
 
                 # ------------------------------------------
                 # MediaPipe hand detection.
@@ -271,6 +283,7 @@ def stream_live_view():
                 # Freeze the burst size and select its first prompt.
                 pending_capture_count = gesture_capture_count or 1
                 capture_sequence_count = pending_capture_count
+                capture_main_foreground_path = next_main_foreground_path()
                 capture_prompt = random.choice(PHOTO_PROMPTS)
                 countdown_started_at = None
 
@@ -301,6 +314,7 @@ def stream_live_view():
                     image_executor,
                     foreground_path,
                     crop_to_portrait=capture_sequence_count in (2, 3),
+                    apply_individual_foreground=capture_sequence_count > 1,
                 )
                 if image_future is not None:
                     capture_image_futures.append(image_future)
@@ -321,9 +335,11 @@ def stream_live_view():
                     save_capture_output(
                         capture_image_futures,
                         image_executor,
+                        capture_main_foreground_path,
                     )
                     capture_image_futures = []
                     capture_sequence_count = None
+                    capture_main_foreground_path = None
                     pending_capture_count = None
 
     except Exception as exc:

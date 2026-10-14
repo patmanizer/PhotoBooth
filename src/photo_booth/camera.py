@@ -38,15 +38,15 @@ def configure_camera(camera):
             print(f"Could not set ISO: {exc}")
 
         # --------------------------------------------------
-        # Aperture: f/8
+        # Aperture: f/5.6
         # --------------------------------------------------
         config = camera.get_config(context)
         settings = config.get_child_by_name("capturesettings")
         widget = settings.get_child_by_name("f-number")
 
-        print("Setting F-Number to f/8")
+        print("Setting F-Number to f/5.6")
 
-        widget.set_value("f/8")
+        widget.set_value("f/5.6")
         camera.set_config(config, context)
 
         # --------------------------------------------------

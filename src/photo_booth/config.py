@@ -7,8 +7,8 @@ PROJECT_ROOT = PACKAGE_DIR.parents[1]
 
 MODEL_PATH = PROJECT_ROOT / "resources" / "hand_landmarker.task"
 CAPTURE_FOLDER = PROJECT_ROOT / "captured_images"
-BACKDROP_FOLDER = PROJECT_ROOT / "resources" / "backdrop"
-FOREGROUND_FOLDER = PROJECT_ROOT / "resources" / "individual_foreground"
+INDIVIDUAL_BACKDROP_FOLDER = PROJECT_ROOT / "resources" / "individual_backdrop"
+INDIVIDUAL_FOREGROUND_FOLDER = PROJECT_ROOT / "resources" / "individual_foreground"
 
 # Gesture settings
 GESTURE_HOLD_TIME = 2.0

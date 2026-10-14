@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageOps
 
-from .config import FOREGROUND_FOLDER
+from .config import INDIVIDUAL_FOREGROUND_FOLDER
 
 _FOREGROUND_EXTENSIONS = {
     ".jpg",
@@ -23,15 +23,15 @@ class ForegroundCycler:
     """Cycle through foreground images in alphabetical order."""
 
     def __init__(self):
-        if not FOREGROUND_FOLDER.is_dir():
+        if not INDIVIDUAL_FOREGROUND_FOLDER.is_dir():
             raise FileNotFoundError(
-                f"Foreground folder not found: {FOREGROUND_FOLDER}"
+                f"Individual foreground folder not found: {INDIVIDUAL_FOREGROUND_FOLDER}"
             )
 
         self._paths = sorted(
             (
                 path
-                for path in FOREGROUND_FOLDER.iterdir()
+                for path in INDIVIDUAL_FOREGROUND_FOLDER.iterdir()
                 if path.is_file()
                 and path.suffix.lower() in _FOREGROUND_EXTENSIONS
             ),
@@ -40,7 +40,7 @@ class ForegroundCycler:
         if not self._paths:
             raise FileNotFoundError(
                 "No supported foreground images found in "
-                f"{FOREGROUND_FOLDER}"
+                f"{INDIVIDUAL_FOREGROUND_FOLDER}"
             )
 
         self._index = 0

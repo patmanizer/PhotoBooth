@@ -13,7 +13,7 @@ from PIL import Image, ImageOps
 from rembg import remove
 
 from .camera import autofocus, configure_camera
-from .config import BACKDROP_FOLDER, CAPTURE_FOLDER
+from .config import INDIVIDUAL_BACKDROP_FOLDER, CAPTURE_FOLDER
 
 _BACKDROP_EXTENSIONS = {
     ".jpg",
@@ -29,19 +29,19 @@ _backdrop_lock = threading.Lock()
 
 
 def _next_backdrop_path():
-    """Return the next supported backdrop in alphabetical cycle order."""
+    """Return the next supported individual_backdrop in alphabetical cycle order."""
 
     global _backdrop_index
 
-    if not BACKDROP_FOLDER.is_dir():
+    if not INDIVIDUAL_BACKDROP_FOLDER.is_dir():
         raise FileNotFoundError(
-            f"Backdrop folder not found: {BACKDROP_FOLDER}"
+            f"Individual backdrop folder not found: {INDIVIDUAL_BACKDROP_FOLDER}"
         )
 
     backdrops = sorted(
         (
             path
-            for path in BACKDROP_FOLDER.iterdir()
+            for path in INDIVIDUAL_BACKDROP_FOLDER.iterdir()
             if path.is_file()
             and path.suffix.lower() in _BACKDROP_EXTENSIONS
         ),
@@ -49,7 +49,7 @@ def _next_backdrop_path():
     )
     if not backdrops:
         raise FileNotFoundError(
-            f"No supported backdrop images found in {BACKDROP_FOLDER}"
+            f"No supported individual_backdrop images found in {INDIVIDUAL_BACKDROP_FOLDER}"
         )
 
     with _backdrop_lock:

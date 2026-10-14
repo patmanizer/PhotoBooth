@@ -1,5 +1,6 @@
 """Live view and gesture-triggered capture."""
 
+import random
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -9,8 +10,17 @@ import mediapipe as mp
 import numpy as np
 
 from .capture import capture_photo
-from .config import GESTURE_HOLD_TIME
-from .drawing import draw_gesture_progress
+from .config import (
+    COUNTDOWN_SECONDS,
+    GESTURE_HOLD_TIME,
+    PHOTO_PROMPTS,
+    PROMPT_DISPLAY_SECONDS,
+)
+from .drawing import (
+    draw_capture_countdown,
+    draw_gesture_progress,
+    draw_steady_message,
+)
 from .foregrounds import (
     ForegroundCycler,
     load_foreground,
@@ -18,6 +28,8 @@ from .foregrounds import (
 )
 from .gestures import get_raised_finger_count
 from .hand_detector import create_hand_detector
+
+_LIVE_VIEW_WINDOW = "Live View"
 
 
 def stream_live_view():
@@ -31,6 +43,7 @@ def stream_live_view():
     cached_foreground_path = None
     cached_foreground = None
     cached_frame_size = None
+    live_view_window_open = False
 
     try:
         # --------------------------------------------------
@@ -59,6 +72,9 @@ def stream_live_view():
 
         live_view_active = True
         frame_timestamp_ms = 0
+        pending_capture_count = None
+        capture_prompt = None
+        countdown_started_at = None
 
         # --------------------------------------------------
         # Live-view loop.
@@ -103,45 +119,45 @@ def stream_live_view():
                 # ------------------------------------------
                 # MediaPipe hand detection.
                 # ------------------------------------------
-                rgb_frame = cv2.cvtColor(
-                    frame,
-                    cv2.COLOR_BGR2RGB,
-                )
-
-                mp_image = mp.Image(
-                    image_format=mp.ImageFormat.SRGB,
-                    data=rgb_frame,
-                )
-
-                frame_timestamp_ms += 33
-
-                results = hand_detector.detect_for_video(
-                    mp_image,
-                    frame_timestamp_ms,
-                )
-
                 detected_finger_count = None
                 hand_landmarks = None
-
-                # ------------------------------------------
-                # Process detected hand.
-                # ------------------------------------------
-                if results.hand_landmarks:
-
-                    # This is the complete landmark list
-                    # for the first detected hand.
-                    hand_landmarks = results.hand_landmarks[0]
-
-                    detected_finger_count = get_raised_finger_count(
-                        hand_landmarks
-                    )
-
-                    draw_gesture_progress(
+                if pending_capture_count is None:
+                    rgb_frame = cv2.cvtColor(
                         frame,
-                        hand_landmarks,
-                        0.0,
-                        detected_finger_count,
+                        cv2.COLOR_BGR2RGB,
                     )
+
+                    mp_image = mp.Image(
+                        image_format=mp.ImageFormat.SRGB,
+                        data=rgb_frame,
+                    )
+
+                    frame_timestamp_ms += 33
+
+                    results = hand_detector.detect_for_video(
+                        mp_image,
+                        frame_timestamp_ms,
+                    )
+
+                    # ------------------------------------------
+                    # Process detected hand.
+                    # ------------------------------------------
+                    if results.hand_landmarks:
+
+                        # This is the complete landmark list
+                        # for the first detected hand.
+                        hand_landmarks = results.hand_landmarks[0]
+
+                        detected_finger_count = get_raised_finger_count(
+                            hand_landmarks
+                        )
+
+                        draw_gesture_progress(
+                            frame,
+                            hand_landmarks,
+                            0.0,
+                            detected_finger_count,
+                        )
 
                 # ------------------------------------------
                 # Gesture hold timer.
@@ -149,6 +165,7 @@ def stream_live_view():
                 if (
                     detected_finger_count is not None
                     and gesture_capture_count is None
+                    and pending_capture_count is None
                 ):
 
                     if detected_finger_count != gesture_finger_count:
@@ -185,11 +202,39 @@ def stream_live_view():
                     gesture_start = None
                     gesture_finger_count = None
 
+                if pending_capture_count is not None:
+                    if countdown_started_at is None:
+                        countdown_number = None
+                    else:
+                        elapsed = time.monotonic() - countdown_started_at
+                        countdown_elapsed = elapsed - PROMPT_DISPLAY_SECONDS
+                        if elapsed < PROMPT_DISPLAY_SECONDS:
+                            countdown_number = None
+                        else:
+                            countdown_number = max(
+                                1,
+                                COUNTDOWN_SECONDS - int(countdown_elapsed),
+                            )
+                    draw_capture_countdown(
+                        frame,
+                        capture_prompt,
+                        countdown_number,
+                    )
+
                 # ------------------------------------------
                 # Display live view.
                 # ------------------------------------------
+                if not live_view_window_open:
+                    cv2.namedWindow(_LIVE_VIEW_WINDOW, cv2.WINDOW_NORMAL)
+                    cv2.setWindowProperty(
+                        _LIVE_VIEW_WINDOW,
+                        cv2.WND_PROP_FULLSCREEN,
+                        cv2.WINDOW_FULLSCREEN,
+                    )
+                    live_view_window_open = True
+
                 cv2.imshow(
-                    "Live View",
+                    _LIVE_VIEW_WINDOW,
                     frame,
                 )
 
@@ -198,30 +243,51 @@ def stream_live_view():
             # --------------------------------------------------
             key = cv2.waitKey(1) & 0xFF
 
-            # Spacebar captures once; gestures capture once per raised finger.
-            if key == ord(" ") or gesture_capture_count is not None:
+            if key == ord("q"):
+                break
 
-                capture_count = gesture_capture_count or 1
+            if (
+                live_view_active
+                and pending_capture_count is not None
+                and countdown_started_at is None
+            ):
+                countdown_started_at = time.monotonic()
+
+            # Spacebar captures once; gestures capture once per raised finger.
+            if pending_capture_count is None and (
+                key == ord(" ") or gesture_capture_count is not None
+            ):
+                pending_capture_count = gesture_capture_count or 1
+                capture_prompt = random.choice(PHOTO_PROMPTS)
+                countdown_started_at = None
+
                 gesture_capture_count = None
                 gesture_start = None
                 gesture_finger_count = None
 
+            elif (
+                pending_capture_count is not None
+                and countdown_started_at is not None
+                and time.monotonic() - countdown_started_at
+                >= PROMPT_DISPLAY_SECONDS + COUNTDOWN_SECONDS
+            ):
                 # Stop live view.
                 live_view_active = False
 
-                cv2.destroyWindow("Live View")
+                steady_frame = np.zeros_like(frame)
+                draw_steady_message(steady_frame)
+                cv2.imshow(_LIVE_VIEW_WINDOW, steady_frame)
+                cv2.waitKey(1)
 
                 time.sleep(0.2)
 
-                # Capture photo.
-                for _ in range(capture_count):
-                    foreground_path = foreground_cycler.current_path
-                    if capture_photo(
-                        camera,
-                        image_executor,
-                        foreground_path,
-                    ):
-                        foreground_cycler.advance()
+                foreground_path = foreground_cycler.current_path
+                if capture_photo(
+                    camera,
+                    image_executor,
+                    foreground_path,
+                ):
+                    foreground_cycler.advance()
 
                 # Resume live view.
                 print("Resuming live view...")
@@ -229,10 +295,12 @@ def stream_live_view():
                 time.sleep(0.5)
 
                 live_view_active = True
-
-            # Q exits the application.
-            elif key == ord("q"):
-                break
+                pending_capture_count -= 1
+                if pending_capture_count:
+                    capture_prompt = random.choice(PHOTO_PROMPTS)
+                    countdown_started_at = None
+                else:
+                    pending_capture_count = None
 
     except Exception as exc:
         print(f"Error: {exc}")

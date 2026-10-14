@@ -1,6 +1,10 @@
 """OpenCV drawing utilities."""
 
 import cv2
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+
+from .config import FONT_PATH
 
 
 HAND_CONNECTIONS = (
@@ -26,6 +30,34 @@ HAND_CONNECTIONS = (
     (19, 20),
     (0, 17),
 )
+
+
+def _draw_centered_text(
+    frame,
+    text,
+    center,
+    font_size,
+    color_bgr,
+    max_width=None,
+):
+    """Draw centered text using the configured OpenType font."""
+
+    font = ImageFont.truetype(FONT_PATH, font_size)
+    if max_width is not None:
+        text_width = font.getbbox(text)[2]
+        if text_width > max_width:
+            font_size = max(1, int(font_size * max_width / text_width))
+            font = ImageFont.truetype(FONT_PATH, font_size)
+
+    image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    ImageDraw.Draw(image).text(
+        center,
+        text,
+        font=font,
+        fill=tuple(reversed(color_bgr)),
+        anchor="mm",
+    )
+    frame[:] = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
 
 
 def draw_hand(frame, hand_landmarks):
@@ -138,26 +170,65 @@ def draw_gesture_progress(
         )
 
     if finger_count is not None:
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = max(1.0, radius / 20)
-        text = str(finger_count)
-        (text_width, text_height), _ = cv2.getTextSize(
-            text,
-            font,
-            font_scale,
-            max(2, radius // 12),
-        )
-        text_origin = (
-            center[0] - text_width // 2,
-            center[1] + text_height // 2,
-        )
-        cv2.putText(
+        _draw_centered_text(
             frame,
-            text,
-            text_origin,
-            font,
-            font_scale,
+            str(finger_count),
+            center,
+            max(32, int(radius * 1.5)),
             (255, 255, 255),
-            2,
-            cv2.LINE_AA,
         )
+
+
+def draw_capture_countdown(frame, prompt, countdown):
+    """Display the photo prompt or countdown with a cinematic overlay."""
+
+    height, width = frame.shape[:2]
+    darkened_frame = frame.copy()
+    cv2.rectangle(
+        darkened_frame,
+        (0, 0),
+        (width, height),
+        (0, 0, 0),
+        -1,
+    )
+    cv2.addWeighted(darkened_frame, 0.58, frame, 0.42, 0, frame)
+
+    white = (255, 255, 255)
+    center_x = width // 2
+
+    if countdown is None:
+        _draw_centered_text(
+            frame,
+            prompt,
+            (center_x, height // 2),
+            72,
+            white,
+            max_width=int(width * 0.82),
+        )
+
+        return
+
+    _draw_centered_text(
+        frame,
+        str(countdown),
+        (center_x, height // 2),
+        300,
+        white,
+        max_width=int(width * 0.65),
+    )
+
+
+def draw_steady_message(frame):
+    """Show a steadying message while the camera takes a photo."""
+
+    height, width = frame.shape[:2]
+    frame[:] = (12, 12, 12)
+
+    _draw_centered_text(
+        frame,
+        "STEADY!",
+        (width // 2, height // 2),
+        180,
+        (255, 255, 255),
+        max_width=int(width * 0.82),
+    )

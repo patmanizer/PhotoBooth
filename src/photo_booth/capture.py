@@ -1,19 +1,28 @@
 """Photo capture and image processing."""
 
 import io
+import math
 import os
+import shutil
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
+from pathlib import Path
+from typing import Sequence
 
 import gphoto2 as gp
 import rawpy
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 from rembg import remove
 
 from .camera import autofocus, configure_camera
-from .config import INDIVIDUAL_BACKDROP_FOLDER, CAPTURE_FOLDER
+from .foregrounds import fit_foreground
+from .config import (
+    CAPTURE_FOLDER,
+    INDIVIDUAL_BACKDROP_FOLDER,
+    OUTPUT_FOLDER,
+)
 
 _BACKDROP_EXTENSIONS = {
     ".jpg",
@@ -59,9 +68,15 @@ def _next_backdrop_path():
     return backdrop_path
 
 
-def _process_captured_image(image_data, original_extension, foreground_path):
+def _process_captured_image(
+    image_data,
+    original_extension,
+    foreground_path,
+    crop_to_portrait,
+):
     """Remove the background and composite subject and foreground."""
 
+    # Convert Nikon RAW files to JPEG before passing the image to rembg.
     if original_extension.lower() in (".nef", ".nrw"):
         with rawpy.imread(io.BytesIO(image_data)) as raw_image:
             full_resolution_image = raw_image.postprocess()
@@ -76,6 +91,7 @@ def _process_captured_image(image_data, original_extension, foreground_path):
     else:
         image_data_for_rembg = image_data
 
+    # Place the cut-out subject over the selected backdrop.
     image_without_background = remove(image_data_for_rembg)
     backdrop_path = _next_backdrop_path()
 
@@ -92,15 +108,23 @@ def _process_captured_image(image_data, original_extension, foreground_path):
 
     composite = Image.alpha_composite(backdrop, subject)
 
-    with Image.open(foreground_path) as foreground_image:
-        foreground = ImageOps.fit(
-            foreground_image.convert("RGBA"),
-            subject.size,
+    # Crop before adding the foreground so the overlay fits the portrait canvas.
+    if crop_to_portrait:
+        portrait_width = max(1, composite.height * 3 // 4)
+        composite = ImageOps.fit(
+            composite,
+            (portrait_width, composite.height),
             method=Image.Resampling.LANCZOS,
         )
 
-    output_path = CAPTURE_FOLDER / f"{capture_timestamp}_composite.png"
-    Image.alpha_composite(composite, foreground).save(output_path)
+    # Save only the foreground-applied photo; collage and single-shot output
+    # both reuse this file, so the foreground is never applied a second time.
+    with Image.open(foreground_path) as foreground_image:
+        foreground = fit_foreground(foreground_image, composite.size)
+
+    output_path = CAPTURE_FOLDER / f"{capture_timestamp}_photo.png"
+    final_image = Image.alpha_composite(composite, foreground)
+    final_image.save(output_path)
 
     return output_path
 
@@ -111,15 +135,161 @@ def _report_processing_result(future: Future):
     except Exception as exc:
         print(f"Image processing error: {exc}")
     else:
-        print(f"Composited image saved to: {output_path}")
+        print(f"Processed photo saved to: {output_path}")
+
+
+def _create_capture_output(
+    image_futures: Sequence[Future[Path]],
+) -> Path:
+    """Save a single photo or a landscape collage of a capture sequence."""
+
+    captures = [future.result() for future in image_futures]
+    if not captures:
+        raise ValueError("Cannot create photo output without captured images")
+
+    OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+    output_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    output_path = OUTPUT_FOLDER / f"{output_timestamp}_photo.png"
+
+    if len(captures) == 1:
+        # A single capture is already the finished photo; copy it unchanged.
+        shutil.copy2(captures[0], output_path)
+        return output_path
+
+    # Use portrait captures as tilted prints on a landscape canvas.
+    with Image.open(captures[0]) as first_image:
+        first = first_image.convert("RGB")
+    photo_height = first.height
+    collage_size = (photo_height * 3 // 2, photo_height)
+    collage = Image.new(
+        "RGB",
+        collage_size,
+        (34, 30, 28),
+    )
+
+    count = len(captures)
+    # Three columns are used for bursts of three or more; extra shots wrap
+    # into additional rows while the overall output remains landscape.
+    columns = min(count, 3)
+    rows = math.ceil(count / columns)
+    card_width = int(collage_size[0] * (0.34 if columns == 2 else 0.26))
+    photo_margin = max(12, card_width // 16)
+    inner_width = card_width - photo_margin * 2
+    inner_size = (
+        inner_width,
+        inner_width * 4 // 3,
+    )
+    card_height = inner_size[1] + photo_margin * 2
+    centers = []
+    for row in range(rows):
+        row_count = min(columns, count - row * columns)
+        for column in range(row_count):
+            # Space each row evenly, centering a final incomplete row.
+            horizontal_position = (
+                0.5
+                if row_count == 1
+                else 0.18 + 0.64 * column / (row_count - 1)
+            )
+            centers.append(
+                (
+                    int(collage_size[0] * horizontal_position),
+                    (
+                        photo_height // 2
+                        if rows == 1
+                        else int(photo_height * (0.28 + 0.44 * row))
+                    ),
+                )
+            )
+    angles = (-5, 5) if count == 2 else (-5, 3, -4)
+
+    for index, image_path in enumerate(captures):
+        if index == 0:
+            photo = first
+        else:
+            with Image.open(image_path) as source:
+                photo = source.convert("RGB")
+
+        fitted_photo = ImageOps.fit(
+            photo,
+            inner_size,
+            method=Image.Resampling.LANCZOS,
+        )
+        # Add only a soft drop shadow behind each tilted photo, with no card.
+        photo_layer = Image.new(
+            "RGBA",
+            (
+                fitted_photo.width + photo_margin * 2,
+                fitted_photo.height + photo_margin * 2,
+            ),
+            (0, 0, 0, 0),
+        )
+        shadow = Image.new("RGBA", photo_layer.size, (0, 0, 0, 0))
+        ImageDraw.Draw(shadow).rectangle(
+            (
+                photo_margin,
+                photo_margin,
+                photo_margin + fitted_photo.width,
+                photo_margin + fitted_photo.height,
+            ),
+            fill=(0, 0, 0, 100),
+        )
+        shadow = shadow.filter(
+            ImageFilter.GaussianBlur(max(2, photo_height // 180))
+        )
+        photo_layer.alpha_composite(shadow)
+        photo_layer.paste(
+            fitted_photo.convert("RGBA"),
+            (photo_margin, photo_margin),
+        )
+        rotated_photo = photo_layer.rotate(
+            angles[index % len(angles)],
+            resample=Image.Resampling.BICUBIC,
+            expand=True,
+        )
+        position = (
+            centers[index][0] - rotated_photo.width // 2,
+            centers[index][1] - rotated_photo.height // 2,
+        )
+        collage.paste(rotated_photo, position, rotated_photo)
+
+    collage.save(output_path)
+    return output_path
+
+
+def _report_output_result(future: Future):
+    try:
+        output_path = future.result()
+    except Exception as exc:
+        print(f"Photo output error: {exc}")
+    else:
+        print(f"Photo output saved to: {output_path}")
+
+
+def save_capture_output(
+    image_futures: Sequence[Future[Path]],
+    image_executor: ThreadPoolExecutor,
+):
+    """Queue output creation after the captured images are processed."""
+
+    if not image_futures:
+        return
+
+    # Queue behind photo processing; the collage task waits for each photo
+    # future before reading its output file.
+    output_future = image_executor.submit(
+        _create_capture_output,
+        tuple(image_futures),
+    )
+    output_future.add_done_callback(_report_output_result)
 
 
 def capture_photo(
     camera,
     image_executor: ThreadPoolExecutor,
     foreground_path,
-):
-    """Capture a photo and queue image processing in the background."""
+    crop_to_portrait=False,
+) -> Future[Path] | None:
+    """Capture a photo and return its queued image-processing future."""
 
     context = gp.Context()
     CAPTURE_FOLDER.mkdir(parents=True, exist_ok=True)
@@ -194,15 +364,16 @@ def capture_photo(
             image_data,
             original_extension,
             foreground_path,
+            crop_to_portrait,
         )
         image_future.add_done_callback(_report_processing_result)
 
-        return True
+        return image_future
 
     except gp.GPhoto2Error as exc:
         print(f"Camera error capturing image: {exc}")
-        return False
+        return None
 
     except Exception as exc:
         print(f"Error capturing image: {exc}")
-        return False
+        return None

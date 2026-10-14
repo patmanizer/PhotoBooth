@@ -9,7 +9,7 @@ import gphoto2 as gp
 import mediapipe as mp
 import numpy as np
 
-from .capture import capture_photo
+from .capture import capture_photo, save_capture_output
 from .config import (
     COUNTDOWN_SECONDS,
     GESTURE_HOLD_TIME,
@@ -20,6 +20,7 @@ from .drawing import (
     draw_capture_countdown,
     draw_gesture_progress,
     draw_steady_message,
+    crop_frame_to_portrait,
 )
 from .foregrounds import (
     ForegroundCycler,
@@ -73,8 +74,12 @@ def stream_live_view():
         live_view_active = True
         frame_timestamp_ms = 0
         pending_capture_count = None
+        # Keep the original burst size while the remaining count decreases,
+        # so every preview frame in a portrait burst stays portrait-cropped.
+        capture_sequence_count = None
         capture_prompt = None
         countdown_started_at = None
+        capture_image_futures = []
 
         # --------------------------------------------------
         # Live-view loop.
@@ -101,6 +106,10 @@ def stream_live_view():
 
                 if frame is None:
                     continue
+
+                if capture_sequence_count in (2, 3):
+                    # Keep preview and saved portrait captures framed alike.
+                    frame = crop_frame_to_portrait(frame)
 
                 frame_size = (frame.shape[1], frame.shape[0])
                 if (
@@ -211,6 +220,7 @@ def stream_live_view():
                         if elapsed < PROMPT_DISPLAY_SECONDS:
                             countdown_number = None
                         else:
+                            # Hold "1" until the capture threshold is reached.
                             countdown_number = max(
                                 1,
                                 COUNTDOWN_SECONDS - int(countdown_elapsed),
@@ -251,13 +261,16 @@ def stream_live_view():
                 and pending_capture_count is not None
                 and countdown_started_at is None
             ):
+                # Start timing only after the prompt has appeared in the window.
                 countdown_started_at = time.monotonic()
 
             # Spacebar captures once; gestures capture once per raised finger.
             if pending_capture_count is None and (
                 key == ord(" ") or gesture_capture_count is not None
             ):
+                # Freeze the burst size and select its first prompt.
                 pending_capture_count = gesture_capture_count or 1
+                capture_sequence_count = pending_capture_count
                 capture_prompt = random.choice(PHOTO_PROMPTS)
                 countdown_started_at = None
 
@@ -282,11 +295,15 @@ def stream_live_view():
                 time.sleep(0.2)
 
                 foreground_path = foreground_cycler.current_path
-                if capture_photo(
+                # Keep each image-processing future for the final burst output.
+                image_future = capture_photo(
                     camera,
                     image_executor,
                     foreground_path,
-                ):
+                    crop_to_portrait=capture_sequence_count in (2, 3),
+                )
+                if image_future is not None:
+                    capture_image_futures.append(image_future)
                     foreground_cycler.advance()
 
                 # Resume live view.
@@ -297,9 +314,16 @@ def stream_live_view():
                 live_view_active = True
                 pending_capture_count -= 1
                 if pending_capture_count:
+                    # Each burst photo gets a new prompt and a fresh countdown.
                     capture_prompt = random.choice(PHOTO_PROMPTS)
                     countdown_started_at = None
                 else:
+                    save_capture_output(
+                        capture_image_futures,
+                        image_executor,
+                    )
+                    capture_image_futures = []
+                    capture_sequence_count = None
                     pending_capture_count = None
 
     except Exception as exc:

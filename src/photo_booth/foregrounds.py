@@ -4,7 +4,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image
 
 from .config import INDIVIDUAL_FOREGROUND_FOLDER
 
@@ -17,6 +17,16 @@ _FOREGROUND_EXTENSIONS = {
     ".tif",
     ".tiff",
 }
+
+
+def fit_foreground(image, size):
+    """Stretch the full foreground image to exactly match the canvas."""
+
+    # Resize rather than crop so the overlay reaches every canvas edge.
+    return image.convert("RGBA").resize(
+        size,
+        resample=Image.Resampling.LANCZOS,
+    )
 
 
 class ForegroundCycler:
@@ -61,11 +71,7 @@ def load_foreground(path, size):
     """Load a foreground as a fitted BGRA image for OpenCV compositing."""
 
     with Image.open(path) as image:
-        foreground = ImageOps.fit(
-            image.convert("RGBA"),
-            size,
-            method=Image.Resampling.LANCZOS,
-        )
+        foreground = fit_foreground(image, size)
         return cv2.cvtColor(
             np.asarray(foreground),
             cv2.COLOR_RGBA2BGRA,
@@ -84,6 +90,8 @@ def overlay_foreground(frame, foreground):
         )
 
     alpha = foreground[:, :, 3:4].astype(np.float32) / 255
+    # Keep the source alpha channel so transparent foreground areas reveal
+    # the camera in live view and the replacement backdrop in saved photos.
     frame[:] = (
         foreground[:, :, :3].astype(np.float32) * alpha
         + frame.astype(np.float32) * (1 - alpha)

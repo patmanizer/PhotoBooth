@@ -8,6 +8,7 @@ PROJECT_ROOT = PACKAGE_DIR.parents[1]
 MODEL_PATH = PROJECT_ROOT / "resources" / "hand_landmarker.task"
 FONT_PATH = PROJECT_ROOT / "resources" / "font" / "SimpleHandmade.otf"
 CAPTURE_FOLDER = PROJECT_ROOT / "captured_images"
+OUTPUT_FOLDER = PROJECT_ROOT / "output"
 INDIVIDUAL_BACKDROP_FOLDER = PROJECT_ROOT / "resources" / "individual_backdrop"
 INDIVIDUAL_FOREGROUND_FOLDER = PROJECT_ROOT / "resources" / "individual_foreground"
 

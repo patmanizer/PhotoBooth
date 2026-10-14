@@ -3,7 +3,8 @@
 /lib/
 resources/hand_landmarker.task
 /share/
-/captured_images
+/captured_images/*
+/output/*
 CACHEDIR.TAG
 pyvenv.cfg
 *.pyc

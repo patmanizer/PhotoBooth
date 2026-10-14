@@ -49,6 +49,7 @@ def _draw_centered_text(
             font_size = max(1, int(font_size * max_width / text_width))
             font = ImageFont.truetype(FONT_PATH, font_size)
 
+    # Pillow draws in RGB while the OpenCV live-view frame is BGR.
     image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     ImageDraw.Draw(image).text(
         center,
@@ -58,6 +59,23 @@ def _draw_centered_text(
         anchor="mm",
     )
     frame[:] = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
+
+
+def crop_frame_to_portrait(frame):
+    """Center-crop a camera frame to a 3:4 portrait aspect ratio."""
+
+    height, width = frame.shape[:2]
+    target_aspect_ratio = 3 / 4
+    if width / height > target_aspect_ratio:
+        # Trim the left and right edges while preserving the frame height.
+        cropped_width = int(height * target_aspect_ratio)
+        left = (width - cropped_width) // 2
+        return frame[:, left:left + cropped_width]
+
+    # For an already narrow frame, trim the top and bottom instead.
+    cropped_height = int(width / target_aspect_ratio)
+    top = (height - cropped_height) // 2
+    return frame[top:top + cropped_height, :]
 
 
 def draw_hand(frame, hand_landmarks):
@@ -184,6 +202,7 @@ def draw_capture_countdown(frame, prompt, countdown):
 
     height, width = frame.shape[:2]
     darkened_frame = frame.copy()
+    # Dim the preview so white prompt and countdown text stays legible.
     cv2.rectangle(
         darkened_frame,
         (0, 0),

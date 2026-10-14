@@ -4,6 +4,13 @@ import time
 
 import gphoto2 as gp
 
+from .config import (
+    CAMERA_APERTURE,
+    CAMERA_FLASH_MODE,
+    CAMERA_ISO,
+    CAMERA_SHUTTER_SPEED,
+)
+
 
 def configure_camera(camera):
     """Configure the Nikon D7000 for photo booth photography."""
@@ -13,16 +20,16 @@ def configure_camera(camera):
         context = gp.Context()
 
         # --------------------------------------------------
-        # ISO: 200
+        # ISO
         # --------------------------------------------------
-        print("Setting ISO to 200")
+        print(f"Setting ISO to {CAMERA_ISO}")
 
         try:
             config = camera.get_config(context)
             settings = config.get_child_by_name("imgsettings")
             iso_widget = settings.get_child_by_name("iso")
 
-            iso_widget.set_value("200")
+            iso_widget.set_value(CAMERA_ISO)
             camera.set_config(config, context)
 
             time.sleep(0.3)
@@ -38,15 +45,15 @@ def configure_camera(camera):
             print(f"Could not set ISO: {exc}")
 
         # --------------------------------------------------
-        # Aperture: f/5.6
+        # Aperture
         # --------------------------------------------------
         config = camera.get_config(context)
         settings = config.get_child_by_name("capturesettings")
         widget = settings.get_child_by_name("f-number")
 
-        print("Setting F-Number to f/5.6")
+        print(f"Setting F-Number to {CAMERA_APERTURE}")
 
-        widget.set_value("f/5.6")
+        widget.set_value(CAMERA_APERTURE)
         camera.set_config(config, context)
 
         # --------------------------------------------------
@@ -56,9 +63,9 @@ def configure_camera(camera):
         settings = config.get_child_by_name("capturesettings")
         widget = settings.get_child_by_name("shutterspeed")
 
-        print("Setting Shutter Speed to 0.0062s")
+        print(f"Setting Shutter Speed to {CAMERA_SHUTTER_SPEED}")
 
-        widget.set_value("0.0062s")
+        widget.set_value(CAMERA_SHUTTER_SPEED)
         camera.set_config(config, context)
 
         # --------------------------------------------------
@@ -68,9 +75,9 @@ def configure_camera(camera):
         settings = config.get_child_by_name("capturesettings")
         widget = settings.get_child_by_name("nikonflashmode")
 
-        print("Nikon Flash Mode set to iTTL")
+        print(f"Nikon Flash Mode set to {CAMERA_FLASH_MODE}")
 
-        widget.set_value("iTTL")
+        widget.set_value(CAMERA_FLASH_MODE)
         camera.set_config(config, context)
 
         # --------------------------------------------------

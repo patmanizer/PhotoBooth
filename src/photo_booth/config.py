@@ -14,6 +14,12 @@ INDIVIDUAL_FOREGROUND_FOLDER = PROJECT_ROOT / "resources" / "individual_foregrou
 COLLAGE_BACKGROUND_FOLDER = PROJECT_ROOT / "resources" / "collage_background"
 MAIN_FOREGROUND_FOLDER = PROJECT_ROOT / "resources" / "main_foreground"
 
+# Camera settings
+CAMERA_ISO = "200"
+CAMERA_APERTURE = "f/5.6"
+CAMERA_SHUTTER_SPEED = "0.0062s"
+CAMERA_FLASH_MODE = "iTTL"
+
 # Gesture settings
 GESTURE_HOLD_TIME = 2.0
 

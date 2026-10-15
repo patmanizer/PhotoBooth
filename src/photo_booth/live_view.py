@@ -12,6 +12,7 @@ import numpy as np
 from .capture import (
     capture_photo,
     next_main_foreground_path,
+    process_captured_photos,
     save_capture_output,
 )
 from .config import (
@@ -84,7 +85,7 @@ def stream_live_view():
         capture_main_foreground_path = None
         capture_prompt = None
         countdown_started_at = None
-        capture_image_futures = []
+        captured_photos = []
 
         # --------------------------------------------------
         # Live-view loop.
@@ -308,16 +309,15 @@ def stream_live_view():
                 time.sleep(0.2)
 
                 foreground_path = foreground_cycler.current_path
-                # Keep each image-processing future for the final burst output.
-                image_future = capture_photo(
+                # Hold downloaded image data until the final shot is captured.
+                captured_photo = capture_photo(
                     camera,
-                    image_executor,
                     foreground_path,
                     crop_to_portrait=capture_sequence_count in (2, 3),
                     apply_individual_foreground=capture_sequence_count > 1,
                 )
-                if image_future is not None:
-                    capture_image_futures.append(image_future)
+                if captured_photo is not None:
+                    captured_photos.append(captured_photo)
                     foreground_cycler.advance()
 
                 # Resume live view.
@@ -332,12 +332,16 @@ def stream_live_view():
                     capture_prompt = random.choice(PHOTO_PROMPTS)
                     countdown_started_at = None
                 else:
+                    image_futures = process_captured_photos(
+                        captured_photos,
+                        image_executor,
+                    )
                     save_capture_output(
-                        capture_image_futures,
+                        image_futures,
                         image_executor,
                         capture_main_foreground_path,
                     )
-                    capture_image_futures = []
+                    captured_photos = []
                     capture_sequence_count = None
                     capture_main_foreground_path = None
                     pending_capture_count = None

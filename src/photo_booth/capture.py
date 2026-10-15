@@ -7,6 +7,7 @@ import random
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Sequence
@@ -48,6 +49,17 @@ _backdrop_index = 0
 _backdrop_lock = threading.Lock()
 _main_foreground_index = 0
 _main_foreground_lock = threading.Lock()
+
+
+@dataclass(frozen=True)
+class CapturedPhoto:
+    """Camera image data and settings waiting for post-capture processing."""
+
+    image_data: bytes
+    original_extension: str
+    foreground_path: Path
+    crop_to_portrait: bool
+    apply_individual_foreground: bool
 
 
 def _next_backdrop_path():
@@ -379,14 +391,36 @@ def save_capture_output(
     output_future.add_done_callback(_report_output_result)
 
 
+def process_captured_photos(
+    captured_photos: Sequence[CapturedPhoto],
+    image_executor: ThreadPoolExecutor,
+) -> list[Future[Path]]:
+    """Queue image processing after every shot in the sequence is captured."""
+
+    image_futures = [
+        image_executor.submit(
+            _process_captured_image,
+            captured_photo.image_data,
+            captured_photo.original_extension,
+            captured_photo.foreground_path,
+            captured_photo.crop_to_portrait,
+            captured_photo.apply_individual_foreground,
+        )
+        for captured_photo in captured_photos
+    ]
+    for image_future in image_futures:
+        image_future.add_done_callback(_report_processing_result)
+
+    return image_futures
+
+
 def capture_photo(
     camera,
-    image_executor: ThreadPoolExecutor,
     foreground_path,
     crop_to_portrait=False,
     apply_individual_foreground=True,
-) -> Future[Path] | None:
-    """Capture a photo and return its queued image-processing future."""
+) -> CapturedPhoto | None:
+    """Capture and download a photo without starting post-processing."""
 
     context = gp.Context()
     CAPTURE_FOLDER.mkdir(parents=True, exist_ok=True)
@@ -455,18 +489,14 @@ def capture_photo(
             or ".jpg"
         )
 
-        print("Photo captured; processing in the background...")
-        image_future = image_executor.submit(
-            _process_captured_image,
+        print("Photo captured; holding image for sequence processing...")
+        return CapturedPhoto(
             image_data,
             original_extension,
             foreground_path,
             crop_to_portrait,
             apply_individual_foreground,
         )
-        image_future.add_done_callback(_report_processing_result)
-
-        return image_future
 
     except gp.GPhoto2Error as exc:
         print(f"Camera error capturing image: {exc}")

@@ -292,7 +292,7 @@ def _create_capture_output(
                 else (
                     0.27 + 0.46 * column / (row_count - 1)
                     if count == 2
-                    else 0.18 + 0.64 * column / (row_count - 1)
+                    else 0.225 + 0.55 * column / (row_count - 1)
                 )
             )
             centers.append(

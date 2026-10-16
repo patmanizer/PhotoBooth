@@ -49,6 +49,31 @@ PHOTO_PROMPTS = (
     "Take center stage and shine!",
     "Make this shot unforgettable!",
 )
+PROCESSING_PROMPTS = (
+    "Hold up! Your awesomeness is loading!",
+    "Warning! Too many good looks detected. Processing!",
+    "Hang tight! We're making you look… well, still awesome!",
+    "Processing your face… Please remain fabulous!",
+    "Almost there! Our computer is thinking really hard!",
+    "Stay cool! Your pixels are having a meeting!",
+    "Please wait… Your smile is taking the scenic route!",
+    "Just a sec! Even your good looks need processing!",
+    "Whoa! That's a lot of good looks to process!",
+    "Keep calm! Your face is loading in HD!",
+    "Please wait… Your smile is under quality inspection!",
+    "Hold on! We're counting all those beautiful pixels!",
+    "Loading your best side… Please stand by!",
+    "Almost done! Our computer needs a coffee break!",
+    "Warning! Smile overload! System needs a moment!",
+    "Be patient! Great photos don't rush themselves!",
+    "Hold your horses! Your fabulousness is being processed!",
+    "Even awesome takes a second! Hang tight!",
+    "Turning your photo into a masterpiece!",
+    "Beep boop! Calculating your level of fabulousness…",
+    "Our pixels are working overtime!",
+    "Don't blink! Your awesomeness is loading!",
+    "Drumroll, please! Your masterpiece is almost ready!",
+)
 PROMPT_DISPLAY_SECONDS = 2.0
 COUNTDOWN_SECONDS = 5
 

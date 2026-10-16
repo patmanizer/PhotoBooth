@@ -19,6 +19,7 @@ from .config import (
     COUNTDOWN_SECONDS,
     GESTURE_HOLD_TIME,
     PHOTO_PROMPTS,
+    PROCESSING_PROMPTS,
     PROMPT_DISPLAY_SECONDS,
 )
 from .drawing import (
@@ -88,6 +89,7 @@ def stream_live_view():
         countdown_started_at = None
         captured_photos = []
         output_future = None
+        processing_prompt = None
 
         # --------------------------------------------------
         # Live-view loop.
@@ -264,10 +266,11 @@ def stream_live_view():
                 )
             elif output_future is not None and not output_future.done():
                 processing_frame = np.zeros_like(frame)
-                draw_processing_message(processing_frame)
+                draw_processing_message(processing_frame, processing_prompt)
                 cv2.imshow(_LIVE_VIEW_WINDOW, processing_frame)
             elif output_future is not None:
                 output_future = None
+                processing_prompt = None
                 live_view_active = True
 
             # --------------------------------------------------
@@ -349,6 +352,8 @@ def stream_live_view():
                         capture_main_foreground_path,
                     )
                     live_view_active = output_future is None
+                    if output_future is not None:
+                        processing_prompt = random.choice(PROCESSING_PROMPTS)
                     captured_photos = []
                     capture_sequence_count = None
                     capture_main_foreground_path = None

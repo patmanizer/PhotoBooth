@@ -252,8 +252,7 @@ def draw_steady_message(frame):
     )
 
 
-
-def draw_processing_message(frame):
+def draw_processing_message(frame, prompt: str):
     """Show a processing message while the photo output is being created."""
 
     height, width = frame.shape[:2]
@@ -261,7 +260,7 @@ def draw_processing_message(frame):
 
     _draw_centered_text(
         frame,
-        "Wait, processing...",
+        prompt,
         (width // 2, height // 2),
         96,
         (255, 255, 255),

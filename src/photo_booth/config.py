@@ -33,6 +33,21 @@ PHOTO_PROMPTS = (
     "Show off your most dramatic look!",
     "Pose like the star of the show!",
     "Share a little Hollywood glamour!",
+    "Give the camera your award-winning smile!",
+    "Strike a pose worthy of a movie poster!",
+    "Show us your leading-role energy!",
+    "Turn up the glamour and own the spotlight!",
+    "Give us a look that says, 'I'm famous!'",
+    "Pose like the paparazzi are watching!",
+    "Make this your close-up moment!",
+    "Show off your signature star pose!",
+    "Bring the drama, darling!",
+    "Smile like you just won an Oscar!",
+    "Give us a little sparkle and confidence!",
+    "Pose like you're walking the red carpet!",
+    "Show us your best Hollywood expression!",
+    "Take center stage and shine!",
+    "Make this shot unforgettable!",
 )
 PROMPT_DISPLAY_SECONDS = 2.0
 COUNTDOWN_SECONDS = 5

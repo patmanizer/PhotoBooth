@@ -25,6 +25,8 @@ from .config import (
     INDIVIDUAL_BACKDROP_FOLDER,
     MAIN_FOREGROUND_FOLDER,
     OUTPUT_FOLDER,
+    RAW_FOLDER,
+    SAVE_RAW_FILES,
 )
 
 _BACKDROP_EXTENSIONS = {
@@ -488,6 +490,13 @@ def capture_photo(
             os.path.splitext(file_path.name)[1]
             or ".jpg"
         )
+
+        if SAVE_RAW_FILES:
+            RAW_FOLDER.mkdir(parents=True, exist_ok=True)
+            raw_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            raw_path = RAW_FOLDER / f"{raw_timestamp}_raw{original_extension}"
+            raw_path.write_bytes(image_data)
+            print(f"Raw photo saved to: {raw_path}")
 
         print("Photo captured; holding image for sequence processing...")
         return CapturedPhoto(

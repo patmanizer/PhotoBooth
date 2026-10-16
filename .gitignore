@@ -5,6 +5,7 @@ resources/hand_landmarker.task
 /share/
 /captured_images/*
 /output/*
+/raw/*
 CACHEDIR.TAG
 pyvenv.cfg
 *.pyc

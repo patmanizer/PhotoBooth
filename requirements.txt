@@ -1,7 +1,7 @@
-gphoto2
-rawpy
-Pillow
-rembg
-numpy
-mediapipe
-opencv-python
+gphoto2==2.6.4
+rawpy==0.27.1
+Pillow==12.3.0
+rembg==2.0.85
+numpy==2.5.3
+mediapipe==1.1.0
+opencv-python==5.0.0.93

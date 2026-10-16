@@ -27,6 +27,7 @@ from .config import (
     OUTPUT_FOLDER,
     RAW_FOLDER,
     SAVE_RAW_FILES,
+    VIRTUAL_BACKDROP_ENABLED,
 )
 
 _BACKDROP_EXTENSIONS = {
@@ -170,7 +171,7 @@ def _process_captured_image(
 ):
     """Remove the background and composite subject and foreground."""
 
-    # Convert Nikon RAW files to JPEG before passing the image to rembg.
+    # Convert Nikon RAW files to JPEG before image processing.
     if original_extension.lower() in (".nef", ".nrw"):
         with rawpy.imread(io.BytesIO(image_data)) as raw_image:
             full_resolution_image = raw_image.postprocess()
@@ -181,26 +182,30 @@ def _process_captured_image(
             format="JPEG",
             quality=95,
         )
-        image_data_for_rembg = jpeg_buffer.getvalue()
+        image_data_for_processing = jpeg_buffer.getvalue()
     else:
-        image_data_for_rembg = image_data
+        image_data_for_processing = image_data
 
-    # Place the cut-out subject over the selected backdrop.
-    image_without_background = remove(image_data_for_rembg)
-    backdrop_path = _next_backdrop_path()
+    if VIRTUAL_BACKDROP_ENABLED:
+        image_without_background = remove(image_data_for_processing)
+        backdrop_path = _next_backdrop_path()
+    else:
+        image_without_background = image_data_for_processing
 
     capture_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     with Image.open(io.BytesIO(image_without_background)) as subject_image:
         subject = subject_image.convert("RGBA")
 
-    with Image.open(backdrop_path) as backdrop_image:
-        backdrop = ImageOps.fit(
-            backdrop_image.convert("RGBA"),
-            subject.size,
-            method=Image.Resampling.LANCZOS,
-        )
-
-    composite = Image.alpha_composite(backdrop, subject)
+    if VIRTUAL_BACKDROP_ENABLED:
+        with Image.open(backdrop_path) as backdrop_image:
+            backdrop = ImageOps.fit(
+                backdrop_image.convert("RGBA"),
+                subject.size,
+                method=Image.Resampling.LANCZOS,
+            )
+        composite = Image.alpha_composite(backdrop, subject)
+    else:
+        composite = subject
 
     # Crop before adding the foreground so the overlay fits the portrait canvas.
     if crop_to_portrait:

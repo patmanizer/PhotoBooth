@@ -11,6 +11,7 @@ CAPTURE_FOLDER = PROJECT_ROOT / "captured_images"
 OUTPUT_FOLDER = PROJECT_ROOT / "output"
 RAW_FOLDER = PROJECT_ROOT / "raw"
 SAVE_RAW_FILES = False
+VIRTUAL_BACKDROP_ENABLED = True
 INDIVIDUAL_BACKDROP_FOLDER = PROJECT_ROOT / "resources" / "individual_backdrop"
 INDIVIDUAL_FOREGROUND_FOLDER = PROJECT_ROOT / "resources" / "individual_foreground"
 COLLAGE_BACKGROUND_FOLDER = PROJECT_ROOT / "resources" / "collage_background"

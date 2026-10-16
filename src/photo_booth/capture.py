@@ -382,11 +382,11 @@ def save_capture_output(
     image_futures: Sequence[Future[Path]],
     image_executor: ThreadPoolExecutor,
     main_foreground_path: Path,
-):
+) -> Future[Path] | None:
     """Queue output creation after the captured images are processed."""
 
     if not image_futures:
-        return
+        return None
 
     # Queue behind photo processing; the collage task waits for each photo
     # future before reading its output file.
@@ -396,6 +396,7 @@ def save_capture_output(
         main_foreground_path,
     )
     output_future.add_done_callback(_report_output_result)
+    return output_future
 
 
 def process_captured_photos(

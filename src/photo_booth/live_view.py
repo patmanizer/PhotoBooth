@@ -24,6 +24,7 @@ from .config import (
 from .drawing import (
     draw_capture_countdown,
     draw_gesture_progress,
+    draw_processing_message,
     draw_steady_message,
     crop_frame_to_portrait,
 )
@@ -86,6 +87,7 @@ def stream_live_view():
         capture_prompt = None
         countdown_started_at = None
         captured_photos = []
+        output_future = None
 
         # --------------------------------------------------
         # Live-view loop.
@@ -260,6 +262,13 @@ def stream_live_view():
                     _LIVE_VIEW_WINDOW,
                     frame,
                 )
+            elif output_future is not None and not output_future.done():
+                processing_frame = np.zeros_like(frame)
+                draw_processing_message(processing_frame)
+                cv2.imshow(_LIVE_VIEW_WINDOW, processing_frame)
+            elif output_future is not None:
+                output_future = None
+                live_view_active = True
 
             # --------------------------------------------------
             # Keyboard controls.
@@ -320,14 +329,12 @@ def stream_live_view():
                     captured_photos.append(captured_photo)
                     foreground_cycler.advance()
 
-                # Resume live view.
-                print("Resuming live view...")
-
-                time.sleep(0.5)
-
-                live_view_active = True
                 pending_capture_count -= 1
                 if pending_capture_count:
+                    # Resume live view for the next shot in a burst.
+                    print("Resuming live view...")
+                    time.sleep(0.5)
+                    live_view_active = True
                     # Each burst photo gets a new prompt and a fresh countdown.
                     capture_prompt = random.choice(PHOTO_PROMPTS)
                     countdown_started_at = None
@@ -336,11 +343,12 @@ def stream_live_view():
                         captured_photos,
                         image_executor,
                     )
-                    save_capture_output(
+                    output_future = save_capture_output(
                         image_futures,
                         image_executor,
                         capture_main_foreground_path,
                     )
+                    live_view_active = output_future is None
                     captured_photos = []
                     capture_sequence_count = None
                     capture_main_foreground_path = None

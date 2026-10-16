@@ -250,3 +250,20 @@ def draw_steady_message(frame):
         (255, 255, 255),
         max_width=int(width * 0.82),
     )
+
+
+
+def draw_processing_message(frame):
+    """Show a processing message while the photo output is being created."""
+
+    height, width = frame.shape[:2]
+    frame[:] = (12, 12, 12)
+
+    _draw_centered_text(
+        frame,
+        "Wait, processing...",
+        (width // 2, height // 2),
+        96,
+        (255, 255, 255),
+        max_width=int(width * 0.82),
+    )

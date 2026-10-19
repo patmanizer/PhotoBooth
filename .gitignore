@@ -1,7 +1,6 @@
 /.idea/
 /bin/
 /lib/
-resources/hand_landmarker.task
 /share/
 /captured_images/*
 /output/*

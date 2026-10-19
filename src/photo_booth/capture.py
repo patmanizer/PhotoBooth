@@ -13,7 +13,7 @@ from typing import Sequence
 import gphoto2 as gp
 import rawpy
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
-from rembg import remove
+from rembg import new_session, remove
 
 from .camera import autofocus, configure_camera
 from .foregrounds import fit_foreground
@@ -49,6 +49,8 @@ _COLLAGE_BACKGROUND_EXTENSIONS = {
 }
 _backdrop_index = 0
 _main_foreground_index = 0
+_BACKGROUND_REMOVAL_MODEL = "u2net_human_seg"
+_background_removal_session = None
 
 
 @dataclass(frozen=True)
@@ -155,6 +157,18 @@ def _apply_main_foreground(image, foreground_path):
     return Image.alpha_composite(image.convert("RGBA"), foreground)
 
 
+def _get_background_removal_session():
+    """Create the configured rembg model session only when first needed."""
+
+    global _background_removal_session
+
+    if _background_removal_session is None:
+        log(f"Loading background removal model: {_BACKGROUND_REMOVAL_MODEL}.")
+        _background_removal_session = new_session(_BACKGROUND_REMOVAL_MODEL)
+
+    return _background_removal_session
+
+
 def _process_captured_image(
     image_data,
     original_extension,
@@ -181,8 +195,12 @@ def _process_captured_image(
 
     if VIRTUAL_BACKDROP_ENABLED:
         removal_started_at = time.monotonic()
-        log("Background removal started.")
-        image_without_background = remove(image_data_for_processing)
+        log(f"Background removal started with {_BACKGROUND_REMOVAL_MODEL}.")
+        removal_session = _get_background_removal_session()
+        image_without_background = remove(
+            image_data_for_processing,
+            session=removal_session,
+        )
         removal_duration = time.monotonic() - removal_started_at
         log(f"Background removal finished in {removal_duration:.2f} seconds.")
         backdrop_path = _next_backdrop_path()

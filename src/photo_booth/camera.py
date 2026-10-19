@@ -10,19 +10,20 @@ from .config import (
     CAMERA_ISO,
     CAMERA_SHUTTER_SPEED,
 )
+from .logging_utils import log
 
 
 def configure_camera(camera):
     """Configure the Nikon D7000 for photo booth photography."""
 
     try:
-        print("Configuring camera...")
+        log("Configuring camera...")
         context = gp.Context()
 
         # --------------------------------------------------
         # ISO
         # --------------------------------------------------
-        print(f"Setting ISO to {CAMERA_ISO}")
+        log(f"Setting ISO to {CAMERA_ISO}")
 
         try:
             config = camera.get_config(context)
@@ -39,10 +40,10 @@ def configure_camera(camera):
             settings = config.get_child_by_name("imgsettings")
             iso_widget = settings.get_child_by_name("iso")
 
-            print(f"ISO reported by camera: {iso_widget.get_value()}")
+            log(f"ISO reported by camera: {iso_widget.get_value()}")
 
         except gp.GPhoto2Error as exc:
-            print(f"Could not set ISO: {exc}")
+            log(f"Could not set ISO: {exc}")
 
         # --------------------------------------------------
         # Aperture
@@ -51,7 +52,7 @@ def configure_camera(camera):
         settings = config.get_child_by_name("capturesettings")
         widget = settings.get_child_by_name("f-number")
 
-        print(f"Setting F-Number to {CAMERA_APERTURE}")
+        log(f"Setting F-Number to {CAMERA_APERTURE}")
 
         widget.set_value(CAMERA_APERTURE)
         camera.set_config(config, context)
@@ -63,7 +64,7 @@ def configure_camera(camera):
         settings = config.get_child_by_name("capturesettings")
         widget = settings.get_child_by_name("shutterspeed")
 
-        print(f"Setting Shutter Speed to {CAMERA_SHUTTER_SPEED}")
+        log(f"Setting Shutter Speed to {CAMERA_SHUTTER_SPEED}")
 
         widget.set_value(CAMERA_SHUTTER_SPEED)
         camera.set_config(config, context)
@@ -75,7 +76,7 @@ def configure_camera(camera):
         settings = config.get_child_by_name("capturesettings")
         widget = settings.get_child_by_name("nikonflashmode")
 
-        print(f"Nikon Flash Mode set to {CAMERA_FLASH_MODE}")
+        log(f"Nikon Flash Mode set to {CAMERA_FLASH_MODE}")
 
         widget.set_value(CAMERA_FLASH_MODE)
         camera.set_config(config, context)
@@ -86,7 +87,7 @@ def configure_camera(camera):
         config = camera.get_config(context)
         settings = config.get_child_by_name("capturesettings")
 
-        print("Camera configuration:")
+        log("Camera configuration:")
 
         for label, widget_name in (
             ("Exposure", "expprogram"),
@@ -99,33 +100,33 @@ def configure_camera(camera):
                     widget_name
                 ).get_value()
 
-                print(f"  {label}: {value}")
+                log(f"  {label}: {value}")
 
             except gp.GPhoto2Error as exc:
-                print(f"  {label}: unavailable ({exc})")
+                log(f"  {label}: unavailable ({exc})")
 
     except gp.GPhoto2Error as exc:
-        print(f"Could not configure camera: {exc}")
+        log(f"Could not configure camera: {exc}")
 
 
 def autofocus(camera, context):
     """Trigger autofocus on the Nikon D7000."""
 
     try:
-        print("Reading autofocus control...")
+        log("Reading autofocus control...")
 
         widget = camera.get_single_config(
             "autofocusdrive",
             context
         )
 
-        print(f"Autofocus widget: {widget.get_name()}")
-        print(f"Widget type: {widget.get_type()}")
-        print(f"Current value: {widget.get_value()}")
+        log(f"Autofocus widget: {widget.get_name()}")
+        log(f"Widget type: {widget.get_type()}")
+        log(f"Current value: {widget.get_value()}")
 
         widget.set_value(1)
 
-        print("Sending autofocus command...")
+        log("Sending autofocus command...")
 
         camera.set_single_config(
             "autofocusdrive",
@@ -133,16 +134,16 @@ def autofocus(camera, context):
             context
         )
 
-        print("Autofocus command accepted.")
+        log("Autofocus command accepted.")
 
         time.sleep(1.0)
 
         return True
 
     except gp.GPhoto2Error as exc:
-        print(f"gphoto2 autofocus error: {exc}")
+        log(f"gphoto2 autofocus error: {exc}")
         return False
 
     except Exception as exc:
-        print(f"Unexpected autofocus error: {exc}")
+        log(f"Unexpected autofocus error: {exc}")
         return False

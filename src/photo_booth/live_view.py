@@ -36,6 +36,7 @@ from .foregrounds import (
 )
 from .gestures import get_raised_finger_count
 from .hand_detector import create_hand_detector
+from .logging_utils import log
 
 _LIVE_VIEW_WINDOW = "Live View"
 
@@ -66,16 +67,16 @@ def stream_live_view():
         camera.init()
         initialized = True
 
-        print("Nikon D7000 initialized.")
+        log("Nikon D7000 initialized.")
 
         # --------------------------------------------------
         # Initialize MediaPipe.
         # --------------------------------------------------
-        print("Starting MediaPipe hand detector...")
+        log("Starting MediaPipe hand detector...")
 
         hand_detector = create_hand_detector()
 
-        print("MediaPipe ready.")
+        log("MediaPipe ready.")
 
         # --------------------------------------------------
         # Gesture state.
@@ -222,7 +223,7 @@ def stream_live_view():
 
                     if elapsed >= GESTURE_HOLD_TIME:
 
-                        print(
+                        log(
                             f"{detected_finger_count}-finger gesture "
                             "triggered!"
                         )
@@ -289,7 +290,7 @@ def stream_live_view():
                 try:
                     processing_future.result()
                 except Exception as exc:
-                    print(f"Photo output error: {exc}")
+                    log(f"Photo output error: {exc}")
                 processing_future = None
                 processing_prompt = None
                 live_view_active = True
@@ -349,7 +350,7 @@ def stream_live_view():
                 pending_capture_count -= 1
                 if pending_capture_count:
                     # Resume live view for the next shot in a burst.
-                    print("Resuming live view...")
+                    log("Resuming live view...")
                     time.sleep(0.5)
                     live_view_active = True
                     # Each burst photo gets a new prompt and a fresh countdown.
@@ -369,7 +370,7 @@ def stream_live_view():
                     pending_capture_count = None
 
     except Exception as exc:
-        print(f"Error: {exc}")
+        log(f"Error: {exc}")
         raise
 
     finally:
@@ -383,4 +384,4 @@ def stream_live_view():
 
         image_executor.shutdown(wait=True)
 
-        print("Camera closed.")
+        log("Camera closed.")

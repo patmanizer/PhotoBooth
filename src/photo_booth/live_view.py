@@ -40,6 +40,12 @@ from .hand_detector import create_hand_detector
 _LIVE_VIEW_WINDOW = "Live View"
 
 
+def _process_capture_batch(captured_photos, main_foreground_path):
+    # Keep image processing off the UI thread; window updates stay in the loop.
+    processed_images = process_captured_photos(captured_photos)
+    return save_capture_output(processed_images, main_foreground_path)
+
+
 def stream_live_view():
     """Run live view until the user presses Q."""
 
@@ -88,7 +94,8 @@ def stream_live_view():
         capture_prompt = None
         countdown_started_at = None
         captured_photos = []
-        output_future = None
+        # The worker handles the batch while the main loop animates the spinner.
+        processing_future = None
         processing_prompt = None
 
         # --------------------------------------------------
@@ -264,14 +271,10 @@ def stream_live_view():
                     _LIVE_VIEW_WINDOW,
                     frame,
                 )
-            elif output_future is not None and not output_future.done():
+            elif processing_future is not None:
                 processing_frame = np.zeros_like(frame)
                 draw_processing_message(processing_frame, processing_prompt)
                 cv2.imshow(_LIVE_VIEW_WINDOW, processing_frame)
-            elif output_future is not None:
-                output_future = None
-                processing_prompt = None
-                live_view_active = True
 
             # --------------------------------------------------
             # Keyboard controls.
@@ -280,6 +283,17 @@ def stream_live_view():
 
             if key == ord("q"):
                 break
+
+            if processing_future is not None and processing_future.done():
+                # Surface worker errors on the UI thread before resuming capture.
+                try:
+                    processing_future.result()
+                except Exception as exc:
+                    print(f"Photo output error: {exc}")
+                processing_future = None
+                processing_prompt = None
+                live_view_active = True
+                continue
 
             if (
                 live_view_active
@@ -342,18 +356,13 @@ def stream_live_view():
                     capture_prompt = random.choice(PHOTO_PROMPTS)
                     countdown_started_at = None
                 else:
-                    image_futures = process_captured_photos(
-                        captured_photos,
-                        image_executor,
-                    )
-                    output_future = save_capture_output(
-                        image_futures,
-                        image_executor,
+                    # Submit only after the full burst has been captured.
+                    processing_future = image_executor.submit(
+                        _process_capture_batch,
+                        tuple(captured_photos),
                         capture_main_foreground_path,
                     )
-                    live_view_active = output_future is None
-                    if output_future is not None:
-                        processing_prompt = random.choice(PROCESSING_PROMPTS)
+                    processing_prompt = random.choice(PROCESSING_PROMPTS)
                     captured_photos = []
                     capture_sequence_count = None
                     capture_main_foreground_path = None

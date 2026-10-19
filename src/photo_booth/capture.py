@@ -4,9 +4,7 @@ import io
 import math
 import os
 import random
-import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -49,9 +47,7 @@ _COLLAGE_BACKGROUND_EXTENSIONS = {
     ".tiff",
 }
 _backdrop_index = 0
-_backdrop_lock = threading.Lock()
 _main_foreground_index = 0
-_main_foreground_lock = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -89,9 +85,8 @@ def _next_backdrop_path():
             f"No supported individual_backdrop images found in {INDIVIDUAL_BACKDROP_FOLDER}"
         )
 
-    with _backdrop_lock:
-        backdrop_path = backdrops[_backdrop_index % len(backdrops)]
-        _backdrop_index += 1
+    backdrop_path = backdrops[_backdrop_index % len(backdrops)]
+    _backdrop_index += 1
 
     return backdrop_path
 
@@ -144,11 +139,8 @@ def next_main_foreground_path():
             f"{MAIN_FOREGROUND_FOLDER}"
         )
 
-    with _main_foreground_lock:
-        foreground_path = foregrounds[
-            _main_foreground_index % len(foregrounds)
-        ]
-        _main_foreground_index += 1
+    foreground_path = foregrounds[_main_foreground_index % len(foregrounds)]
+    _main_foreground_index += 1
 
     return foreground_path
 
@@ -229,22 +221,12 @@ def _process_captured_image(
     return output_path
 
 
-def _report_processing_result(future: Future):
-    try:
-        output_path = future.result()
-    except Exception as exc:
-        print(f"Image processing error: {exc}")
-    else:
-        print(f"Processed photo saved to: {output_path}")
-
-
 def _create_capture_output(
-    image_futures: Sequence[Future[Path]],
+    captures: Sequence[Path],
     main_foreground_path: Path,
 ) -> Path:
     """Save a single photo or a landscape collage of a capture sequence."""
 
-    captures = [future.result() for future in image_futures]
     if not captures:
         raise ValueError("Cannot create photo output without captured images")
 
@@ -369,57 +351,49 @@ def _create_capture_output(
     return output_path
 
 
-def _report_output_result(future: Future):
-    try:
-        output_path = future.result()
-    except Exception as exc:
-        print(f"Photo output error: {exc}")
-    else:
-        print(f"Photo output saved to: {output_path}")
-
-
 def save_capture_output(
-    image_futures: Sequence[Future[Path]],
-    image_executor: ThreadPoolExecutor,
+    captures: Sequence[Path],
     main_foreground_path: Path,
-) -> Future[Path] | None:
-    """Queue output creation after the captured images are processed."""
+) -> Path | None:
+    """Create the output after the captured images are processed."""
 
-    if not image_futures:
+    if not captures:
         return None
 
-    # Queue behind photo processing; the collage task waits for each photo
-    # future before reading its output file.
-    output_future = image_executor.submit(
-        _create_capture_output,
-        tuple(image_futures),
-        main_foreground_path,
-    )
-    output_future.add_done_callback(_report_output_result)
-    return output_future
+    output_path = _create_capture_output(captures, main_foreground_path)
+    print(f"Photo output saved to: {output_path}")
+    return output_path
 
 
 def process_captured_photos(
     captured_photos: Sequence[CapturedPhoto],
-    image_executor: ThreadPoolExecutor,
-) -> list[Future[Path]]:
-    """Queue image processing after every shot in the sequence is captured."""
+) -> list[Path]:
+    """Process every captured photo in sequence after the batch is captured."""
 
-    image_futures = [
-        image_executor.submit(
-            _process_captured_image,
-            captured_photo.image_data,
-            captured_photo.original_extension,
-            captured_photo.foreground_path,
-            captured_photo.crop_to_portrait,
-            captured_photo.apply_individual_foreground,
-        )
-        for captured_photo in captured_photos
-    ]
-    for image_future in image_futures:
-        image_future.add_done_callback(_report_processing_result)
+    processed_images: list[Path] = []
+    processing_errors: list[Exception] = []
+    for captured_photo in captured_photos:
+        try:
+            output_path = _process_captured_image(
+                captured_photo.image_data,
+                captured_photo.original_extension,
+                captured_photo.foreground_path,
+                captured_photo.crop_to_portrait,
+                captured_photo.apply_individual_foreground,
+            )
+        except Exception as exc:
+            print(f"Image processing error: {exc}")
+            processing_errors.append(exc)
+        else:
+            print(f"Processed photo saved to: {output_path}")
+            processed_images.append(output_path)
 
-    return image_futures
+    if processing_errors:
+        raise RuntimeError(
+            f"Failed to process {len(processing_errors)} captured photo(s)"
+        ) from processing_errors[0]
+
+    return processed_images
 
 
 def capture_photo(

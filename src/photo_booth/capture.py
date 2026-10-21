@@ -49,7 +49,7 @@ _COLLAGE_BACKGROUND_EXTENSIONS = {
 }
 _backdrop_index = 0
 _main_foreground_index = 0
-_BACKGROUND_REMOVAL_MODEL = "u2net_human_seg"
+_BACKGROUND_REMOVAL_MODEL = "bria-rmbg"
 _background_removal_session = None
 
 

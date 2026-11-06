@@ -115,7 +115,7 @@ class _HailoModNetSession:
             output_buffers={self._output_name: output_buffer},
         )
         bindings.input().set_buffer(input_tensor)
-        self._configured_model.run([bindings], timeout_ms=30000)
+        self._configured_model.run([bindings], timeout=30000)
         matte = np.asarray(bindings.output().get_buffer(), dtype=np.float32)
         if len(self._output_model_shape) == 4:
             matte = matte[0]

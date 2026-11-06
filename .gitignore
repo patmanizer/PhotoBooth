@@ -8,3 +8,4 @@
 CACHEDIR.TAG
 pyvenv.cfg
 *.pyc
+/resources/modnet_photographic_portrait_matting.hef

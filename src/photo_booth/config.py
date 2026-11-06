@@ -1,11 +1,18 @@
 """Shared application configuration."""
 
+import os
 from pathlib import Path
 
 PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_DIR.parents[1]
 
 MODEL_PATH = PROJECT_ROOT / "resources" / "hand_landmarker.task"
+MODNET_HEF_PATH = Path(
+    os.environ.get(
+        "PHOTOBOOTH_MODNET_HEF",
+        PROJECT_ROOT / "resources" / "modnet_photographic_portrait_matting.hef",
+    )
+).expanduser()
 FONT_PATH = PROJECT_ROOT / "resources" / "font" / "SimpleHandmade.otf"
 CAPTURE_FOLDER = PROJECT_ROOT / "captured_images"
 OUTPUT_FOLDER = PROJECT_ROOT / "output"

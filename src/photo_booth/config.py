@@ -6,11 +6,14 @@ from pathlib import Path
 PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_DIR.parents[1]
 
-MODEL_PATH = PROJECT_ROOT / "resources" / "hand_landmarker.task"
+MODEL_PATH = PROJECT_ROOT / "resources" / "models" / "hand_landmarker.task"
 MODNET_HEF_PATH = Path(
     os.environ.get(
         "PHOTOBOOTH_MODNET_HEF",
-        PROJECT_ROOT / "resources" / "modnet_photographic_portrait_matting.hef",
+        PROJECT_ROOT
+        / "resources"
+        / "models"
+        / "modnet_photographic_portrait_matting.hef",
     )
 ).expanduser()
 FONT_PATH = PROJECT_ROOT / "resources" / "font" / "SimpleHandmade.otf"

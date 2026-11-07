@@ -7,7 +7,7 @@ Install the HailoRT runtime and its `hailo_platform` Python bindings using the R
 Place a Hailo-10H-compatible MODNet HEF at:
 
 ```text
-resources/modnet_photographic_portrait_matting.hef
+resources/models/modnet_photographic_portrait_matting.hef
 ```
 
 Alternatively, set `PHOTOBOOTH_MODNET_HEF` to the HEF's path. The file is intentionally excluded from Git because it is a hardware-specific compiled model. The expected model has one fixed-shape RGB input and one single-channel alpha-matte output; the runtime handles either HWC or CHW tensor layout. MODNet's input is normalized to `[-1, 1]`, and the output matte is interpreted in `[0, 1]`.

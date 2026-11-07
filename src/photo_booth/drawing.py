@@ -171,7 +171,7 @@ def draw_gesture_progress(
         frame,
         center,
         radius,
-        (80, 80, 80),
+        (0, 255, 255),
         thickness,
         cv2.LINE_AA,
     )

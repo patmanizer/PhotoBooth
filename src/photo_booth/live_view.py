@@ -41,9 +41,27 @@ from .logging_utils import log
 _LIVE_VIEW_WINDOW = "Live View"
 
 
-def _process_capture_batch(captured_photos, main_foreground_path):
-    # Keep image processing off the UI thread; window updates stay in the loop.
-    processed_images = process_captured_photos(captured_photos)
+def _process_captured_photo(captured_photo):
+    """Process one capture off the UI thread while the burst continues."""
+    processed_images = process_captured_photos((captured_photo,))
+    return processed_images[0]
+
+
+def _save_capture_batch(processing_futures, main_foreground_path):
+    """Create the final output after all individually queued photos finish."""
+    processed_images = []
+    processing_errors = []
+    for processing_future in processing_futures:
+        try:
+            processed_images.append(processing_future.result())
+        except Exception as exc:
+            processing_errors.append(exc)
+
+    if processing_errors:
+        raise RuntimeError(
+            f"Failed to process {len(processing_errors)} captured photo(s)"
+        ) from processing_errors[0]
+
     return save_capture_output(processed_images, main_foreground_path)
 
 
@@ -94,8 +112,8 @@ def stream_live_view():
         capture_main_foreground_path = None
         capture_prompt = None
         countdown_started_at = None
-        captured_photos = []
-        # The worker handles the batch while the main loop animates the spinner.
+        processing_futures = []
+        # Process each photo in the worker while the burst continues.
         processing_future = None
         processing_prompt = None
 
@@ -344,7 +362,12 @@ def stream_live_view():
                     apply_individual_foreground=capture_sequence_count > 1,
                 )
                 if captured_photo is not None:
-                    captured_photos.append(captured_photo)
+                    processing_futures.append(
+                        image_executor.submit(
+                            _process_captured_photo,
+                            captured_photo,
+                        )
+                    )
                     foreground_cycler.advance()
 
                 pending_capture_count -= 1
@@ -357,14 +380,15 @@ def stream_live_view():
                     capture_prompt = random.choice(PHOTO_PROMPTS)
                     countdown_started_at = None
                 else:
-                    # Submit only after the full burst has been captured.
+                    # The single worker processes these in capture order; queue
+                    # final output creation behind the per-photo processing.
                     processing_future = image_executor.submit(
-                        _process_capture_batch,
-                        tuple(captured_photos),
+                        _save_capture_batch,
+                        tuple(processing_futures),
                         capture_main_foreground_path,
                     )
                     processing_prompt = random.choice(PROCESSING_PROMPTS)
-                    captured_photos = []
+                    processing_futures = []
                     capture_sequence_count = None
                     capture_main_foreground_path = None
                     pending_capture_count = None

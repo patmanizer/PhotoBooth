@@ -22,6 +22,7 @@ from .background_removal import (
 from .camera import autofocus, configure_camera
 from .foregrounds import fit_foreground
 from .logging_utils import log
+from .synology_upload import upload_output_photo
 from .config import (
     CAPTURE_FOLDER,
     COLLAGE_BACKGROUND_FOLDER,
@@ -391,6 +392,7 @@ def save_capture_output(
 
     output_path = _create_capture_output(captures, main_foreground_path)
     log(f"Photo output saved to: {output_path}")
+    upload_output_photo(output_path)
     return output_path
 
 

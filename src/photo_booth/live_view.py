@@ -25,6 +25,7 @@ from .config import (
     PROMPT_DISPLAY_SECONDS,
 )
 from .drawing import (
+    _draw_centered_text,
     draw_capture_countdown,
     draw_gesture_progress,
     draw_processing_message,
@@ -72,26 +73,22 @@ def _create_dropbox_display_frame(photo_path, shared_url, frame_shape):
         photo_x : photo_x + photo.shape[1],
     ] = photo
 
-    qr_size = min(int(width * 0.30), int(height * 0.58))
+    qr_size = min(int(width * 0.30), int(height * 0.50))
     qr = cv2.resize(qr, (qr_size, qr_size), interpolation=cv2.INTER_NEAREST)
     qr_x = int(width * 0.66) + (int(width * 0.30) - qr_size) // 2
     qr_y = max(margin, (height - qr_size) // 2)
     canvas[qr_y : qr_y + qr_size, qr_x : qr_x + qr_size] = qr
 
-    text = "SCAN TO VIEW PHOTO"
-    text_scale = max(0.5, min(1.0, width / 1400))
-    text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, text_scale, 2)[0]
-    text_x = int(width * 0.66) + (int(width * 0.30) - text_size[0]) // 2
-    text_y = max(margin, qr_y - margin // 2)
-    cv2.putText(
+    _draw_centered_text(
         canvas,
-        text,
-        (text_x, text_y),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        text_scale,
+        "SCAN TO VIEW PHOTO",
+        (
+            int(width * 0.66) + int(width * 0.15),
+            max(margin // 2, qr_y - margin),
+        ),
+        max(24, int(min(height, width) * 0.06)),
         (255, 255, 255),
-        2,
-        cv2.LINE_AA,
+        max_width=int(width * 0.30),
     )
     return canvas
 

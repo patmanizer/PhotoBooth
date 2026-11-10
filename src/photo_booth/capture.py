@@ -20,8 +20,6 @@ from .background_removal import (
     remove_background,
 )
 from .camera import autofocus, configure_camera
-from .foregrounds import fit_foreground
-from .logging_utils import log
 from .config import (
     CAPTURE_FOLDER,
     COLLAGE_BACKGROUND_FOLDER,
@@ -32,6 +30,9 @@ from .config import (
     SAVE_RAW_FILES,
     VIRTUAL_BACKDROP_ENABLED,
 )
+from .dropbox_upload import upload_output_photo as upload_output_photo_to_dropbox
+from .foregrounds import fit_foreground
+from .logging_utils import log
 
 _BACKDROP_EXTENSIONS = {
     ".jpg",
@@ -391,6 +392,7 @@ def save_capture_output(
 
     output_path = _create_capture_output(captures, main_foreground_path)
     log(f"Photo output saved to: {output_path}")
+    upload_output_photo_to_dropbox(output_path)
     return output_path
 
 

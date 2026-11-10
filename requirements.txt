@@ -5,3 +5,4 @@ rembg==2.0.85
 numpy==2.5.3
 mediapipe==1.1.0
 opencv-python==5.0.0.93
+certifi==2026.7.22

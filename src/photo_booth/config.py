@@ -7,21 +7,15 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_DIR.parents[1]
 
 MODEL_PATH = PROJECT_ROOT / "resources" / "models" / "hand_landmarker.task"
-MODNET_HEF_PATH = Path(
-    os.environ.get(
-        "PHOTOBOOTH_MODNET_HEF",
-        PROJECT_ROOT
-        / "resources"
-        / "models"
-        / "modnet_photographic_portrait_matting.hef",
-    )
-).expanduser()
+MODNET_HEF_PATH = PROJECT_ROOT / "resources" / "models" / "modnet_photographic_portrait_matting.hef"
 FONT_PATH = PROJECT_ROOT / "resources" / "font" / "SimpleHandmade.otf"
 CAPTURE_FOLDER = PROJECT_ROOT / "captured_images"
 OUTPUT_FOLDER = PROJECT_ROOT / "output"
 RAW_FOLDER = PROJECT_ROOT / "raw"
 SAVE_RAW_FILES = False
 VIRTUAL_BACKDROP_ENABLED = True
+DROPBOX_ACCESS_TOKEN = os.environ.get("PHOTOBOOTH_DROPBOX_ACCESS_TOKEN", "sl.u.AG1CN92E-Wj7iimh73zQKNar29EB1a3raOIHGnJwl5Th-igxe4hBpGIjavWCkYAdDsgyLNaivRZkr5DrbZE-_1oM5cAClrI2i0bqMqMeBCcOMtNQOmmlCAaG_6BYxUPuWZvpieW38UYfy66qADUjstTLahuaQl-jWibUW7nFRiCpH-VJKevIbzqlbuy7wECme1mhEulWa7Sa5lNMoSqsM9t4z7wYc6vVLOsK60YrUHLibzp6loVqRhYXi455SigoIqQNgUkXhYZCbkNpMEcJ3348NnjCuC2caCHvALA0UCrJ72WW2iDo-4Xj60YTJ-438ZygfDU5k4r55RqtFDmgt7C93c562XeQnf3nZ6xV07YouTB8BZu6KPjVYrfzkfgt_cJjlF1JaL8E6DKErxFkIB1PRG9f6gYbKNLE7i6H3fqI0Zo-UXo5_ZqxHZ1l72ahiBuTkY1s1GMYf0o5K1lAOnkfGD5XIPc7Dqt61k9TUzm05NQAvlCL2y8HKUfEg8wlQpjQuBBJQvnUi1UrraWJUpgHNvWNc9EZcozLzaxDwKglJjaYYn50McuNREg2G5t8mF27iLZ0Al6aeotBaEbcROoFOGm0WfiF9RoDJgLx6CHLwDO4ZIfyIohG8bilQYTso6pXxQJgVPBiCUSFMZH7gyXyRYrZiMOF4z-fFzafaRr75kg7Vmxxz6i970Wny0_LNcX9QWCZBFT8hN0pyk9vho-epmcnNWrKOxiu3uuXv2wrHakNtmdiQqZfV8-DYCGQE3-LKbLvoXaHItT5gZleo_tFYDks5f1fN63H6tYvYPiKijIU2UOF7OpuR8320Qgny7DXsNepftkVxC81p1IBUFoqlRqnR027slzjAv7q-m7EiCBAlhytFvyNQXBG0XEiCF1gu1SpOH_3xJ_yEjZ2rUBBZX5WGpX6XIfWH8T7Tr0QpBSnHhujflWnYd4QWzD6PlyDCM5vqLLjHl-lmWQHvM-uwYJT-Q2JMpH8JrB2kehI3BUhWqMtjZtTo4GkwUP6IDInGTP156N_eOhBrLWkpg3ElA_cOSpfcUh85YK1_Ot0kdRte_WF4cSHM8N0WHtRDFL_CKT04XJyg0Zsnka8kxLdbwZrhBARj3yPQbQOEHb7JZPbj4ozLuA9-GV3oq9yxP2IW_rRyd9ZgCbOOuNGoOO3CmzmoKY3jdTrsaO7e2feAujhaTM9XB1idOl6PuapxCyZgfcKX_80Yu-MVzDi7Un-h8J73LA2lv3594bw_k5pJdlELBn71X31aTlWrnqAFTToxgjazab_Y-yDX9nygABvprDdm894Uwq0BYOaXVEDnzsSwBr93MEUoy_cRmflAS8")
+DROPBOX_UPLOAD_PATH = "/PhotoBooth/output"
 INDIVIDUAL_BACKDROP_FOLDER = PROJECT_ROOT / "resources" / "individual_backdrop"
 INDIVIDUAL_FOREGROUND_FOLDER = PROJECT_ROOT / "resources" / "individual_foreground"
 COLLAGE_BACKGROUND_FOLDER = PROJECT_ROOT / "resources" / "collage_background"

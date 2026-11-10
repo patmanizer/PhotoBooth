@@ -7,15 +7,7 @@ PACKAGE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_DIR.parents[1]
 
 MODEL_PATH = PROJECT_ROOT / "resources" / "models" / "hand_landmarker.task"
-MODNET_HEF_PATH = Path(
-    os.environ.get(
-        "PHOTOBOOTH_MODNET_HEF",
-        PROJECT_ROOT
-        / "resources"
-        / "models"
-        / "modnet_photographic_portrait_matting.hef",
-    )
-).expanduser()
+MODNET_HEF_PATH = PROJECT_ROOT / "resources" / "models" / "modnet_photographic_portrait_matting.hef"
 FONT_PATH = PROJECT_ROOT / "resources" / "font" / "SimpleHandmade.otf"
 CAPTURE_FOLDER = PROJECT_ROOT / "captured_images"
 OUTPUT_FOLDER = PROJECT_ROOT / "output"
@@ -26,7 +18,7 @@ NAS_UPLOAD_ENABLED = True
 NAS_URL = "https://patman-ds.synology.me:5001"
 NAS_USERNAME = "patman"
 NAS_PASSWORD = "P@$$w0rd"
-NAS_UPLOAD_PATH = "/photo/PhotoBooth"
+NAS_UPLOAD_PATH = "/PhotoBooth/output"
 INDIVIDUAL_BACKDROP_FOLDER = PROJECT_ROOT / "resources" / "individual_backdrop"
 INDIVIDUAL_FOREGROUND_FOLDER = PROJECT_ROOT / "resources" / "individual_foreground"
 COLLAGE_BACKGROUND_FOLDER = PROJECT_ROOT / "resources" / "collage_background"

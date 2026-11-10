@@ -1,11 +1,14 @@
 """Upload completed photos to Synology DSM File Station."""
 
 import json
+import ssl
 from http.cookiejar import CookieJar
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
-from urllib.request import HTTPCookieProcessor, Request, build_opener
+from urllib.request import HTTPSHandler, HTTPCookieProcessor, Request, build_opener
+
+import certifi
 
 from .config import (
     NAS_PASSWORD,
@@ -19,19 +22,34 @@ from .logging_utils import log
 _REQUEST_TIMEOUT_SECONDS = 120
 
 
-def _read_api_response(opener, request):
+def _build_opener():
+    tls_context = ssl.create_default_context()
+    tls_context.load_verify_locations(cafile=certifi.where())
+    return build_opener(
+        HTTPCookieProcessor(CookieJar()),
+        HTTPSHandler(context=tls_context),
+    )
+
+
+def _read_api_response(opener, request, operation):
     try:
         with opener.open(request, timeout=_REQUEST_TIMEOUT_SECONDS) as response:
             result = json.loads(response.read().decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, OSError) as exc:
-        raise RuntimeError(f"Synology API request failed: {exc}") from exc
+        raise RuntimeError(
+            f"Synology {operation} request failed: {exc}"
+        ) from exc
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise RuntimeError("Synology API returned an invalid JSON response") from exc
+        raise RuntimeError(
+            f"Synology {operation} returned an invalid JSON response"
+        ) from exc
 
     if not result.get("success"):
         error = result.get("error", {})
         code = error.get("code", "unknown")
-        raise RuntimeError(f"Synology API request failed with error code {code}")
+        raise RuntimeError(
+            f"Synology {operation} failed with API error code {code}"
+        )
     return result.get("data", {})
 
 
@@ -93,7 +111,7 @@ def upload_output_photo(photo_path: Path):
     if not NAS_UPLOAD_PATH.startswith("/"):
         raise ValueError("NAS_UPLOAD_PATH in config.py must start with '/'")
 
-    opener = build_opener(HTTPCookieProcessor(CookieJar()))
+    opener = _build_opener()
     auth_endpoint = f"{NAS_URL}/webapi/auth.cgi"
     entry_endpoint = f"{NAS_URL}/webapi/entry.cgi"
     sid = None
@@ -113,7 +131,7 @@ def upload_output_photo(photo_path: Path):
                 }
             ).encode("utf-8"),
         )
-        login_data = _read_api_response(opener, login_request)
+        login_data = _read_api_response(opener, login_request, "login")
         sid = login_data.get("sid")
         if not sid:
             raise RuntimeError("Synology login succeeded without returning a SID")
@@ -128,7 +146,7 @@ def upload_output_photo(photo_path: Path):
             data=body,
             headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         )
-        _read_api_response(opener, upload_request)
+        _read_api_response(opener, upload_request, "photo upload")
         log(f"Photo uploaded to Synology: {Path(photo_path).name}")
     finally:
         if sid:
@@ -145,6 +163,6 @@ def upload_output_photo(photo_path: Path):
                         }
                     ).encode("utf-8"),
                 )
-                _read_api_response(opener, logout_request)
+                _read_api_response(opener, logout_request, "logout")
             except Exception as exc:
                 log(f"Synology logout warning: {exc}")

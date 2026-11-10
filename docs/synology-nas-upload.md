@@ -20,6 +20,14 @@ not overwrite existing files. Use an account with access only to the required
 destination folder. Keep real credentials out of tracked files and logs;
 HTTPS is recommended.
 
+HTTPS certificate verification remains enabled. PhotoBooth adds the `certifi`
+public CA bundle to the system trust store, which helps when the host's Python
+environment does not have a complete CA store. If verification still fails,
+ensure DSM is configured with a valid certificate and serves its complete
+certificate chain; do not disable TLS verification.
+
 When enabled, PhotoBooth logs in to DSM, uploads each completed output photo,
-and logs out. The original output remains saved locally. An upload/API error is
-reported as a photo output error.
+and logs out. The DSM account must be enabled and have read/write access to the
+destination shared folder and directory. The original output remains saved
+locally. An upload/API error is reported as a photo output error, including
+whether login or photo upload failed.

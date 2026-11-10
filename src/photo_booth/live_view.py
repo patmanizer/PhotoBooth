@@ -8,6 +8,7 @@ import cv2
 import gphoto2 as gp
 import mediapipe as mp
 import numpy as np
+import qrcode
 
 from .capture import (
     capture_photo,
@@ -17,6 +18,7 @@ from .capture import (
 )
 from .config import (
     COUNTDOWN_SECONDS,
+    DROPBOX_QR_DISPLAY_SECONDS,
     GESTURE_HOLD_TIME,
     PHOTO_PROMPTS,
     PROCESSING_PROMPTS,
@@ -39,6 +41,59 @@ from .hand_detector import create_hand_detector
 from .logging_utils import log
 
 _LIVE_VIEW_WINDOW = "Live View"
+
+
+def _create_dropbox_display_frame(photo_path, shared_url, frame_shape):
+    photo = cv2.imread(str(photo_path))
+    if photo is None:
+        raise RuntimeError(f"Could not load output photo for QR display: {photo_path}")
+
+    qr_image = qrcode.make(shared_url).convert("RGB")
+    qr = cv2.cvtColor(np.asarray(qr_image), cv2.COLOR_RGB2BGR)
+
+    height, width = frame_shape[:2]
+    canvas = np.zeros((height, width, 3), dtype=np.uint8)
+    margin = max(16, min(height, width) // 30)
+    photo_area_width = int(width * 0.62) - 2 * margin
+    photo_area_height = height - 2 * margin
+    photo_scale = min(
+        photo_area_width / photo.shape[1],
+        photo_area_height / photo.shape[0],
+    )
+    photo_size = (
+        max(1, round(photo.shape[1] * photo_scale)),
+        max(1, round(photo.shape[0] * photo_scale)),
+    )
+    photo = cv2.resize(photo, photo_size, interpolation=cv2.INTER_AREA)
+    photo_x = margin + (photo_area_width - photo.shape[1]) // 2
+    photo_y = margin + (photo_area_height - photo.shape[0]) // 2
+    canvas[
+        photo_y : photo_y + photo.shape[0],
+        photo_x : photo_x + photo.shape[1],
+    ] = photo
+
+    qr_size = min(int(width * 0.30), int(height * 0.58))
+    qr = cv2.resize(qr, (qr_size, qr_size), interpolation=cv2.INTER_NEAREST)
+    qr_x = int(width * 0.66) + (int(width * 0.30) - qr_size) // 2
+    qr_y = max(margin, (height - qr_size) // 2)
+    canvas[qr_y : qr_y + qr_size, qr_x : qr_x + qr_size] = qr
+
+    text = "SCAN TO VIEW PHOTO"
+    text_scale = max(0.5, min(1.0, width / 1400))
+    text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, text_scale, 2)[0]
+    text_x = int(width * 0.66) + (int(width * 0.30) - text_size[0]) // 2
+    text_y = max(margin, qr_y - margin // 2)
+    cv2.putText(
+        canvas,
+        text,
+        (text_x, text_y),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        text_scale,
+        (255, 255, 255),
+        2,
+        cv2.LINE_AA,
+    )
+    return canvas
 
 
 def _process_captured_photo(captured_photo):
@@ -116,11 +171,23 @@ def stream_live_view():
         # Process each photo in the worker while the burst continues.
         processing_future = None
         processing_prompt = None
+        dropbox_display_frame = None
+        dropbox_display_until = None
 
         # --------------------------------------------------
         # Live-view loop.
         # --------------------------------------------------
         while True:
+            if dropbox_display_until is not None:
+                cv2.imshow(_LIVE_VIEW_WINDOW, dropbox_display_frame)
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord("q"):
+                    break
+                if time.monotonic() >= dropbox_display_until:
+                    dropbox_display_frame = None
+                    dropbox_display_until = None
+                else:
+                    continue
 
             if live_view_active:
 
@@ -306,7 +373,18 @@ def stream_live_view():
             if processing_future is not None and processing_future.done():
                 # Surface worker errors on the UI thread before resuming capture.
                 try:
-                    processing_future.result()
+                    output = processing_future.result()
+                    if output is not None:
+                        output_path, shared_url = output
+                        if shared_url:
+                            dropbox_display_frame = _create_dropbox_display_frame(
+                                output_path,
+                                shared_url,
+                                frame.shape,
+                            )
+                            dropbox_display_until = (
+                                time.monotonic() + DROPBOX_QR_DISPLAY_SECONDS
+                            )
                 except Exception as exc:
                     log(f"Photo output error: {exc}")
                 processing_future = None

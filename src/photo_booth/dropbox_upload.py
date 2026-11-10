@@ -12,6 +12,9 @@ from .config import DROPBOX_ACCESS_TOKEN, DROPBOX_UPLOAD_PATH
 from .logging_utils import log
 
 _DROPBOX_UPLOAD_URL = "https://content.dropboxapi.com/2/files/upload"
+_DROPBOX_SHARE_URL = (
+    "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings"
+)
 _REQUEST_TIMEOUT_SECONDS = 120
 
 
@@ -21,8 +24,36 @@ def _build_opener():
     return build_opener(HTTPSHandler(context=tls_context))
 
 
-def upload_output_photo(photo_path: Path):
-    """Upload a completed photo if a Dropbox access token is configured."""
+def _read_api_response(opener, request, operation):
+    try:
+        with opener.open(
+            request,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+        ) as response:
+            result = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        try:
+            error = json.loads(exc.read().decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            error = {}
+        detail = error.get("error_summary", exc.reason)
+        raise RuntimeError(
+            f"Dropbox {operation} failed with HTTP {exc.code}: {detail}"
+        ) from exc
+    except (URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"Dropbox {operation} request failed: {exc}") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"Dropbox returned an invalid {operation} response"
+        ) from exc
+
+    if not isinstance(result, dict):
+        raise RuntimeError(f"Dropbox returned an unexpected {operation} response")
+    return result
+
+
+def upload_output_photo(photo_path: Path) -> str | None:
+    """Upload a photo and return its Dropbox shared URL, if configured."""
 
     if not DROPBOX_ACCESS_TOKEN:
         return
@@ -31,7 +62,7 @@ def upload_output_photo(photo_path: Path):
 
     photo_path = Path(photo_path)
     dropbox_path = f"{DROPBOX_UPLOAD_PATH.rstrip('/')}/{photo_path.name}"
-    request = Request(
+    upload_request = Request(
         _DROPBOX_UPLOAD_URL,
         data=photo_path.read_bytes(),
         headers={
@@ -48,27 +79,26 @@ def upload_output_photo(photo_path: Path):
         },
         method="POST",
     )
-
-    try:
-        with _build_opener().open(
-            request,
-            timeout=_REQUEST_TIMEOUT_SECONDS,
-        ) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        try:
-            error = json.loads(exc.read().decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            error = {}
-        detail = error.get("error_summary", exc.reason)
-        raise RuntimeError(
-            f"Dropbox photo upload failed with HTTP {exc.code}: {detail}"
-        ) from exc
-    except (URLError, TimeoutError, OSError) as exc:
-        raise RuntimeError(f"Dropbox photo upload request failed: {exc}") from exc
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise RuntimeError("Dropbox returned an invalid upload response") from exc
+    opener = _build_opener()
+    result = _read_api_response(opener, upload_request, "photo upload")
 
     if not isinstance(result, dict) or result.get("name") != photo_path.name:
         raise RuntimeError("Dropbox returned an unexpected upload response")
     log(f"Photo uploaded to Dropbox: {dropbox_path}")
+
+    share_request = Request(
+        _DROPBOX_SHARE_URL,
+        data=json.dumps({"path": result.get("path_lower", dropbox_path)}).encode(
+            "utf-8"
+        ),
+        headers={
+            "Authorization": f"Bearer {DROPBOX_ACCESS_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    share_result = _read_api_response(opener, share_request, "shared-link creation")
+    shared_url = share_result.get("url")
+    if not isinstance(shared_url, str) or not shared_url.startswith("https://"):
+        raise RuntimeError("Dropbox returned an invalid shared photo URL")
+    return shared_url

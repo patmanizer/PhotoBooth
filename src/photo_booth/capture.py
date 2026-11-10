@@ -384,7 +384,7 @@ def _create_capture_output(
 def save_capture_output(
     captures: Sequence[Path],
     main_foreground_path: Path,
-) -> Path | None:
+) -> tuple[Path, str | None] | None:
     """Create the output after the captured images are processed."""
 
     if not captures:
@@ -392,8 +392,8 @@ def save_capture_output(
 
     output_path = _create_capture_output(captures, main_foreground_path)
     log(f"Photo output saved to: {output_path}")
-    upload_output_photo_to_dropbox(output_path)
-    return output_path
+    dropbox_shared_url = upload_output_photo_to_dropbox(output_path)
+    return output_path, dropbox_shared_url
 
 
 def process_captured_photos(

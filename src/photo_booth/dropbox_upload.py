@@ -18,6 +18,22 @@ _DROPBOX_SHARE_URL = (
 _REQUEST_TIMEOUT_SECONDS = 120
 
 
+class _DropboxAPIError(RuntimeError):
+    def __init__(self, status, reason, error, raw_body):
+        self.status = status
+        self.error = error
+        self.raw_body = raw_body
+
+        if isinstance(error, dict):
+            detail = error.get("error_summary")
+            if not detail and "error" in error:
+                detail = json.dumps(error["error"], sort_keys=True)
+        else:
+            detail = None
+        detail = detail or raw_body.strip() or reason
+        super().__init__(f"HTTP {status}: {detail}")
+
+
 def _build_opener():
     tls_context = ssl.create_default_context()
     tls_context.load_verify_locations(cafile=certifi.where())
@@ -32,13 +48,16 @@ def _read_api_response(opener, request, operation):
         ) as response:
             result = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
+        raw_body = exc.read().decode("utf-8", errors="replace")
         try:
-            error = json.loads(exc.read().decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            error = {}
-        detail = error.get("error_summary", exc.reason)
-        raise RuntimeError(
-            f"Dropbox {operation} failed with HTTP {exc.code}: {detail}"
+            error = json.loads(raw_body)
+        except json.JSONDecodeError:
+            error = None
+        raise _DropboxAPIError(
+            exc.code,
+            exc.reason,
+            error,
+            raw_body,
         ) from exc
     except (URLError, TimeoutError, OSError) as exc:
         raise RuntimeError(f"Dropbox {operation} request failed: {exc}") from exc
@@ -50,6 +69,31 @@ def _read_api_response(opener, request, operation):
     if not isinstance(result, dict):
         raise RuntimeError(f"Dropbox returned an unexpected {operation} response")
     return result
+
+
+def _get_existing_shared_link(opener, dropbox_path):
+    request = Request(
+        "https://api.dropboxapi.com/2/sharing/list_shared_links",
+        data=json.dumps(
+            {"path": dropbox_path, "direct_only": True}
+        ).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {DROPBOX_ACCESS_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    result = _read_api_response(opener, request, "existing shared-link lookup")
+    for link in result.get("links", []):
+        link_path = link.get("path_lower", "")
+        url = link.get("url")
+        if link_path.casefold() == dropbox_path.casefold():
+            if isinstance(url, str) and url.startswith("https://"):
+                return url
+    raise RuntimeError(
+        "Dropbox reported an existing shared link but returned no link for "
+        f"{dropbox_path}"
+    )
 
 
 def upload_output_photo(photo_path: Path) -> str | None:
@@ -97,7 +141,22 @@ def upload_output_photo(photo_path: Path) -> str | None:
         },
         method="POST",
     )
-    share_result = _read_api_response(opener, share_request, "shared-link creation")
+    try:
+        share_result = _read_api_response(
+            opener,
+            share_request,
+            "shared-link creation",
+        )
+    except _DropboxAPIError as exc:
+        error_text = (
+            json.dumps(exc.error).casefold()
+            if exc.error is not None
+            else ""
+        )
+        if "shared_link_already_exists" in error_text:
+            uploaded_path = result.get("path_lower", dropbox_path)
+            return _get_existing_shared_link(opener, uploaded_path)
+        raise RuntimeError(f"Dropbox shared-link creation failed: {exc}") from exc
     shared_url = share_result.get("url")
     if not isinstance(shared_url, str) or not shared_url.startswith("https://"):
         raise RuntimeError("Dropbox returned an invalid shared photo URL")

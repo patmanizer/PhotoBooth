@@ -7,13 +7,25 @@ Create a Dropbox API app in the Dropbox App Console with the
 `files.content.write` and `sharing.write` permissions, and generate an access
 token. To use the default Dropbox path, give the app **Full Dropbox** access;
 with **App Folder** access, the configured path is relative to that app's
-folder. Keep the token secret. Configure it in the environment used to launch
+folder. Keep the token secret. For automatic access-token refresh, authorize
+the app using Dropbox's OAuth flow with offline access enabled
+(`token_access_type=offline`) and keep the returned refresh token, app key,
+and app secret. Configure all four values in the environment used to launch
 PhotoBooth:
 
 ```sh
 export PHOTOBOOTH_DROPBOX_ACCESS_TOKEN="YOUR_DROPBOX_ACCESS_TOKEN"
+export PHOTOBOOTH_DROPBOX_REFRESH_TOKEN="YOUR_DROPBOX_REFRESH_TOKEN"
+export PHOTOBOOTH_DROPBOX_APP_KEY="YOUR_DROPBOX_APP_KEY"
+export PHOTOBOOTH_DROPBOX_APP_SECRET="YOUR_DROPBOX_APP_SECRET"
 ./start.sh
 ```
+
+When Dropbox rejects an expired access token, PhotoBooth exchanges the refresh
+token for a new access token and retries the API request once. The replacement
+access token is kept in memory; the refresh token remains the long-lived
+credential. If the refresh token or app credentials are not configured, the
+upload reports that automatic refresh is unavailable.
 
 By default, uploads go to `/PhotoBooth/output` in the Dropbox account. Change
 `DROPBOX_UPLOAD_PATH` in `src/photo_booth/config.py` to use another Dropbox

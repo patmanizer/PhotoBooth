@@ -1,14 +1,23 @@
 """Upload completed output photos to Dropbox when configured."""
 
+import base64
 import json
 import ssl
 from pathlib import Path
+from threading import Lock
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import HTTPSHandler, Request, build_opener
 
 import certifi
 
-from .config import DROPBOX_ACCESS_TOKEN, DROPBOX_UPLOAD_PATH
+from .config import (
+    DROPBOX_ACCESS_TOKEN,
+    DROPBOX_APP_KEY,
+    DROPBOX_APP_SECRET,
+    DROPBOX_REFRESH_TOKEN,
+    DROPBOX_UPLOAD_PATH,
+)
 from .logging_utils import log
 
 _DROPBOX_UPLOAD_URL = "https://content.dropboxapi.com/2/files/upload"
@@ -16,6 +25,9 @@ _DROPBOX_SHARE_URL = (
     "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings"
 )
 _REQUEST_TIMEOUT_SECONDS = 120
+_DROPBOX_TOKEN_URL = "https://api.dropboxapi.com/oauth2/token"
+_access_token = DROPBOX_ACCESS_TOKEN
+_TOKEN_REFRESH_LOCK = Lock()
 
 
 class _DropboxAPIError(RuntimeError):
@@ -71,6 +83,66 @@ def _read_api_response(opener, request, operation):
     return result
 
 
+def _is_expired_access_token(error):
+    if error.status != 401 or error.error is None:
+        return False
+    details = json.dumps(error.error).casefold()
+    return "invalid_access_token" in details or "expired_access_token" in details
+
+
+def _refresh_access_token(opener):
+    if not all((DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY, DROPBOX_APP_SECRET)):
+        raise RuntimeError(
+            "Dropbox access token expired. Configure "
+            "PHOTOBOOTH_DROPBOX_REFRESH_TOKEN, PHOTOBOOTH_DROPBOX_APP_KEY, "
+            "and PHOTOBOOTH_DROPBOX_APP_SECRET to enable automatic refresh."
+        )
+
+    credentials = base64.b64encode(
+        f"{DROPBOX_APP_KEY}:{DROPBOX_APP_SECRET}".encode("utf-8")
+    ).decode("ascii")
+    request = Request(
+        _DROPBOX_TOKEN_URL,
+        data=urlencode(
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": DROPBOX_REFRESH_TOKEN,
+            }
+        ).encode("utf-8"),
+        headers={
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+    result = _read_api_response(opener, request, "access-token refresh")
+    refreshed_token = result.get("access_token")
+    if not isinstance(refreshed_token, str) or not refreshed_token:
+        raise RuntimeError("Dropbox token refresh returned no access token")
+    return refreshed_token
+
+
+def _read_authenticated_api_response(opener, request, operation):
+    global _access_token
+
+    with _TOKEN_REFRESH_LOCK:
+        token_used = _access_token
+    request.add_header("Authorization", f"Bearer {token_used}")
+    try:
+        return _read_api_response(opener, request, operation)
+    except _DropboxAPIError as exc:
+        if not _is_expired_access_token(exc):
+            raise
+
+    with _TOKEN_REFRESH_LOCK:
+        if _access_token == token_used:
+            _access_token = _refresh_access_token(opener)
+        refreshed_token = _access_token
+
+    request.add_header("Authorization", f"Bearer {refreshed_token}")
+    return _read_api_response(opener, request, operation)
+
+
 def _get_existing_shared_link(opener, dropbox_path):
     request = Request(
         "https://api.dropboxapi.com/2/sharing/list_shared_links",
@@ -83,7 +155,11 @@ def _get_existing_shared_link(opener, dropbox_path):
         },
         method="POST",
     )
-    result = _read_api_response(opener, request, "existing shared-link lookup")
+    result = _read_authenticated_api_response(
+        opener,
+        request,
+        "existing shared-link lookup",
+    )
     for link in result.get("links", []):
         link_path = link.get("path_lower", "")
         url = link.get("url")
@@ -124,7 +200,11 @@ def upload_output_photo(photo_path: Path) -> str | None:
         method="POST",
     )
     opener = _build_opener()
-    result = _read_api_response(opener, upload_request, "photo upload")
+    result = _read_authenticated_api_response(
+        opener,
+        upload_request,
+        "photo upload",
+    )
 
     if not isinstance(result, dict) or result.get("name") != photo_path.name:
         raise RuntimeError("Dropbox returned an unexpected upload response")
@@ -142,7 +222,7 @@ def upload_output_photo(photo_path: Path) -> str | None:
         method="POST",
     )
     try:
-        share_result = _read_api_response(
+        share_result = _read_authenticated_api_response(
             opener,
             share_request,
             "shared-link creation",

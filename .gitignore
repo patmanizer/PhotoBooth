@@ -5,6 +5,7 @@
 /captured_images/*
 /output/*
 /raw/*
+/logs/*.log
 CACHEDIR.TAG
 pyvenv.cfg
 *.pyc

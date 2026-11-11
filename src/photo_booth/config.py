@@ -19,7 +19,6 @@ DROPBOX_AUTHORIZATION_CODE = os.environ.get(
     "",
 )
 DROPBOX_REDIRECT_URI = os.environ.get("DROPBOX_REDIRECT_URI", "")
-DROPBOX_REFRESH_TOKEN = os.environ.get("DROPBOX_REFRESH_TOKEN", "")
 DROPBOX_APP_KEY = os.environ.get("DROPBOX_APP_KEY", "")
 DROPBOX_APP_SECRET = os.environ.get("DROPBOX_APP_SECRET", "")
 DROPBOX_UPLOAD_PATH = os.environ.get("DROPBOX_UPLOAD_PATH", "/PhotoBooth/output")

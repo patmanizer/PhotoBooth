@@ -2,7 +2,14 @@
 set -eu
 
 PROJECT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+ENV_FILE="$PROJECT_DIR/.env"
 VENV_ACTIVATE="$PROJECT_DIR/.venv/bin/activate"
+
+if [ -f "$ENV_FILE" ]; then
+    set -a
+    . "$ENV_FILE"
+    set +a
+fi
 
 if [ ! -f "$VENV_ACTIVATE" ]; then
     printf 'Virtual environment not found: %s\n' "$VENV_ACTIVATE" >&2

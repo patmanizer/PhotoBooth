@@ -6,6 +6,7 @@
 /output/*
 /raw/*
 /logs/*.log
+/.env
 CACHEDIR.TAG
 pyvenv.cfg
 *.pyc

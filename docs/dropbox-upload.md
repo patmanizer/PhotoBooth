@@ -10,14 +10,13 @@ with **App Folder** access, the configured path is relative to that app's
 folder. Keep the token secret. For automatic access-token refresh, authorize
 the app using Dropbox's OAuth flow with offline access enabled
 (`token_access_type=offline`) and keep the returned refresh token, app key,
-and app secret. Configure all four values in the environment used to launch
-PhotoBooth:
+and app secret. Copy `.env.example` to `.env` in the project root and fill in
+all four credentials. `start.sh` sources `.env` automatically; `.env` is
+ignored by Git:
 
 ```sh
-export PHOTOBOOTH_DROPBOX_ACCESS_TOKEN="YOUR_DROPBOX_ACCESS_TOKEN"
-export PHOTOBOOTH_DROPBOX_REFRESH_TOKEN="YOUR_DROPBOX_REFRESH_TOKEN"
-export PHOTOBOOTH_DROPBOX_APP_KEY="YOUR_DROPBOX_APP_KEY"
-export PHOTOBOOTH_DROPBOX_APP_SECRET="YOUR_DROPBOX_APP_SECRET"
+cp .env.example .env
+# Edit .env and enter the Dropbox credentials
 ./start.sh
 ```
 

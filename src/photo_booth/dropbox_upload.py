@@ -14,10 +14,10 @@ from urllib.request import HTTPSHandler, Request, build_opener
 import certifi
 
 from .config import (
-    DROPBOX_AUTHORIZATION_CODE,
+    DROPBOX_ACCESS_TOKEN,
     DROPBOX_APP_KEY,
     DROPBOX_APP_SECRET,
-    DROPBOX_REDIRECT_URI,
+    DROPBOX_REFRESH_TOKEN,
     DROPBOX_UPLOAD_PATH,
 )
 from .logging_utils import log
@@ -29,9 +29,7 @@ _DROPBOX_SHARE_URL = (
 _REQUEST_TIMEOUT_SECONDS = 120
 _CONNECTION_RESET_RETRY_DELAYS_SECONDS = (1, 2)
 _DROPBOX_TOKEN_URL = "https://api.dropboxapi.com/oauth2/token"
-_access_token = ""
-_refresh_token = ""
-_authorization_code_used = False
+_access_token = DROPBOX_ACCESS_TOKEN
 _TOKEN_REFRESH_LOCK = Lock()
 
 
@@ -90,10 +88,8 @@ def _read_api_response(opener, request, operation):
 
 def _caused_by_connection_reset(error):
     seen = set()
-    while isinstance(error, BaseException) and id(error) not in seen:
+    while error is not None and id(error) not in seen:
         seen.add(id(error))
-        if isinstance(error, HTTPError):
-            return False
         if isinstance(error, URLError):
             error = error.reason
             continue
@@ -131,58 +127,12 @@ def _is_expired_access_token(error):
     return "invalid_access_token" in details or "expired_access_token" in details
 
 
-def _exchange_authorization_code(opener):
-    global _access_token, _refresh_token, _authorization_code_used
-
-    if not all((DROPBOX_AUTHORIZATION_CODE, DROPBOX_APP_KEY, DROPBOX_APP_SECRET)):
-        raise RuntimeError(
-            "Dropbox authorization requires "
-            "PHOTOBOOTH_DROPBOX_AUTHORIZATION_CODE, "
-            "PHOTOBOOTH_DROPBOX_APP_KEY, and PHOTOBOOTH_DROPBOX_APP_SECRET."
-        )
-
-    credentials = base64.b64encode(
-        f"{DROPBOX_APP_KEY}:{DROPBOX_APP_SECRET}".encode("utf-8")
-    ).decode("ascii")
-    parameters = {
-        "grant_type": "authorization_code",
-        "code": DROPBOX_AUTHORIZATION_CODE,
-    }
-    if DROPBOX_REDIRECT_URI:
-        parameters["redirect_uri"] = DROPBOX_REDIRECT_URI
-    request = Request(
-        _DROPBOX_TOKEN_URL,
-        data=urlencode(parameters).encode("utf-8"),
-        headers={
-            "Authorization": f"Basic {credentials}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        method="POST",
-    )
-    result = _read_api_response_with_retry(
-        opener,
-        request,
-        "authorization-code exchange",
-    )
-    access_token = result.get("access_token")
-    refresh_token = result.get("refresh_token")
-    if not isinstance(access_token, str) or not access_token:
-        raise RuntimeError("Dropbox authorization returned no access token")
-    if not isinstance(refresh_token, str) or not refresh_token:
-        raise RuntimeError(
-            "Dropbox authorization returned no refresh token. Authorize with "
-            "offline access enabled (token_access_type=offline)."
-        )
-    _access_token = access_token
-    _refresh_token = refresh_token
-    _authorization_code_used = True
-
-
 def _refresh_access_token(opener):
-    if not all((_refresh_token, DROPBOX_APP_KEY, DROPBOX_APP_SECRET)):
+    if not all((DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY, DROPBOX_APP_SECRET)):
         raise RuntimeError(
-            "Dropbox access token expired and no in-memory refresh token is "
-            "available. Start PhotoBooth with a fresh authorization code."
+            "Dropbox access token expired. Configure "
+            "PHOTOBOOTH_DROPBOX_REFRESH_TOKEN, PHOTOBOOTH_DROPBOX_APP_KEY, "
+            "and PHOTOBOOTH_DROPBOX_APP_SECRET to enable automatic refresh."
         )
 
     credentials = base64.b64encode(
@@ -193,7 +143,7 @@ def _refresh_access_token(opener):
         data=urlencode(
             {
                 "grant_type": "refresh_token",
-                "refresh_token": _refresh_token,
+                "refresh_token": DROPBOX_REFRESH_TOKEN,
             }
         ).encode("utf-8"),
         headers={
@@ -217,13 +167,6 @@ def _read_authenticated_api_response(opener, request, operation):
     global _access_token
 
     with _TOKEN_REFRESH_LOCK:
-        if not _access_token:
-            if _authorization_code_used:
-                raise RuntimeError(
-                    "Dropbox authorization code has already been used. "
-                    "Set a fresh authorization code before restarting."
-                )
-            _exchange_authorization_code(opener)
         token_used = _access_token
     request.add_header("Authorization", f"Bearer {token_used}")
     try:
@@ -248,7 +191,7 @@ def _get_existing_shared_link(opener, dropbox_path):
             {"path": dropbox_path, "direct_only": True}
         ).encode("utf-8"),
         headers={
-            "Authorization": f"Bearer {_access_token}",
+            "Authorization": f"Bearer {DROPBOX_ACCESS_TOKEN}",
             "Content-Type": "application/json",
         },
         method="POST",
@@ -271,15 +214,13 @@ def _get_existing_shared_link(opener, dropbox_path):
 
 
 def upload_output_photo(photo_path: Path) -> str | None:
-    """Upload a photo using credentials exchanged from an authorization code."""
+    """Upload a photo and return its Dropbox shared URL, if configured."""
 
-    if not DROPBOX_AUTHORIZATION_CODE:
+    if not any((
+            DROPBOX_ACCESS_TOKEN,
+            DROPBOX_REFRESH_TOKEN
+    )):
         return
-    if not all((DROPBOX_APP_KEY, DROPBOX_APP_SECRET)):
-        raise RuntimeError(
-            "Dropbox authorization requires PHOTOBOOTH_DROPBOX_APP_KEY and "
-            "PHOTOBOOTH_DROPBOX_APP_SECRET."
-        )
     if not DROPBOX_UPLOAD_PATH.startswith("/"):
         raise ValueError("DROPBOX_UPLOAD_PATH in config.py must start with '/'")
 
@@ -289,7 +230,7 @@ def upload_output_photo(photo_path: Path) -> str | None:
         _DROPBOX_UPLOAD_URL,
         data=photo_path.read_bytes(),
         headers={
-            "Authorization": f"Bearer {_access_token}",
+            "Authorization": f"Bearer {DROPBOX_ACCESS_TOKEN}",
             "Content-Type": "application/octet-stream",
             "Dropbox-API-Arg": json.dumps(
                 {
@@ -319,7 +260,7 @@ def upload_output_photo(photo_path: Path) -> str | None:
             "utf-8"
         ),
         headers={
-            "Authorization": f"Bearer {_access_token}",
+            "Authorization": f"Bearer {DROPBOX_ACCESS_TOKEN}",
             "Content-Type": "application/json",
         },
         method="POST",

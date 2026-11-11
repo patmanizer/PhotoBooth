@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from threading import Lock
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPSHandler, Request, build_opener
 
 import certifi
@@ -75,7 +75,11 @@ def _read_api_response(opener, request, operation):
             raw_body,
         ) from exc
     except (URLError, TimeoutError, OSError) as exc:
-        raise RuntimeError(f"Dropbox {operation} request failed: {exc}") from exc
+        host = urlsplit(request.full_url).hostname or "unknown host"
+        detail = _describe_connection_error(exc)
+        raise RuntimeError(
+            f"Dropbox {operation} connection to {host} failed: {detail}"
+        ) from exc
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RuntimeError(
             f"Dropbox returned an invalid {operation} response"
@@ -84,6 +88,23 @@ def _read_api_response(opener, request, operation):
     if not isinstance(result, dict):
         raise RuntimeError(f"Dropbox returned an unexpected {operation} response")
     return result
+
+
+def _describe_connection_error(error):
+    seen = set()
+    details = []
+    current = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, URLError):
+            current = current.reason
+            continue
+        detail = f"{type(current).__name__}: {current}"
+        if detail not in details:
+            details.append(detail)
+        current = current.__cause__
+
+    return " -> ".join(details) or str(error)
 
 
 def _caused_by_connection_reset(error):

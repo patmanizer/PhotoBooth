@@ -125,6 +125,82 @@ def _caused_by_connection_reset(error):
     return False
 
 
+def _read_api_response_with_retry(opener, request, operation):
+    """Retry requests interrupted by a connection reset."""
+    for attempt, delay in enumerate(
+        (*_CONNECTION_RESET_RETRY_DELAYS_SECONDS, None),
+        start=1,
+    ):
+        try:
+            return _read_api_response(opener, request, operation)
+        except RuntimeError as exc:
+            if not _caused_by_connection_reset(exc) or delay is None:
+                raise
+            log(
+                f"Dropbox {operation} connection reset; retrying "
+                f"(attempt {attempt + 1}/"
+                f"{len(_CONNECTION_RESET_RETRY_DELAYS_SECONDS) + 1})."
+            )
+            time.sleep(delay)
+
+
+def _is_expired_access_token(error):
+    if error.status != 401 or error.error is None:
+        return False
+    details = json.dumps(error.error).casefold()
+    return "invalid_access_token" in details or "expired_access_token" in details
+
+
+def _refresh_access_token(opener):
+    if not all((DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY, DROPBOX_APP_SECRET)):
+        raise RuntimeError(
+            "Dropbox authentication requires "
+            "PHOTOBOOTH_DROPBOX_REFRESH_TOKEN, PHOTOBOOTH_DROPBOX_APP_KEY, "
+            "and PHOTOBOOTH_DROPBOX_APP_SECRET."
+        )
+
+    credentials = base64.b64encode(
+        f"{DROPBOX_APP_KEY}:{DROPBOX_APP_SECRET}".encode("utf-8")
+    ).decode("ascii")
+    request = Request(
+        _DROPBOX_TOKEN_URL,
+        data=urlencode(
+            {
+                "grant_type": "refresh_token",
+                "refresh_token": DROPBOX_REFRESH_TOKEN,
+            }
+        ).encode("utf-8"),
+        headers={
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+    result = _read_api_response_with_retry(
+        opener,
+        request,
+        "access-token refresh",
+    )
+    access_token = result.get("access_token")
+    if not isinstance(access_token, str) or not access_token:
+        raise RuntimeError("Dropbox token refresh returned no access token")
+    return access_token
+
+
+def _read_authenticated_api_response(opener, request, operation):
+    global _access_token
+
+    with _TOKEN_REFRESH_LOCK:
+        if not _access_token:
+            _access_token = _refresh_access_token(opener)
+        token_used = _access_token
+
+    request.add_header("Authorization", f"Bearer {token_used}")
+    try:
+        return _read_api_response_with_retry(opener, request, operation)
+    except _DropboxAPIError as exc:
+        if not _is_expired_access_token(exc):
+            raise
 
     # Another thread may already have refreshed the token while this request
     # was in flight. Only refresh if the token we used is still current.

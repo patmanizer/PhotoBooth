@@ -1,5 +1,6 @@
 """Live view and gesture-triggered capture."""
 
+import math
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -169,6 +170,8 @@ def stream_live_view():
         processing_future = None
         processing_prompt = None
         dropbox_display_frame = None
+        dropbox_display_rendered_frame = None
+        dropbox_display_countdown = None
         dropbox_display_until = None
 
         # --------------------------------------------------
@@ -176,12 +179,36 @@ def stream_live_view():
         # --------------------------------------------------
         while True:
             if dropbox_display_until is not None:
-                cv2.imshow(_LIVE_VIEW_WINDOW, dropbox_display_frame)
+                seconds_remaining = max(
+                    0,
+                    math.ceil(dropbox_display_until - time.monotonic()),
+                )
+                if seconds_remaining != dropbox_display_countdown:
+                    dropbox_display_rendered_frame = dropbox_display_frame.copy()
+                    _draw_centered_text(
+                        dropbox_display_rendered_frame,
+                        f"RETURNING IN {seconds_remaining}s",
+                        (
+                            int(dropbox_display_frame.shape[1] * 0.81),
+                            int(dropbox_display_frame.shape[0] * 0.90),
+                        ),
+                        max(
+                            24,
+                            int(min(dropbox_display_frame.shape[:2]) * 0.06),
+                        ),
+                        (255, 255, 255),
+                        max_width=int(dropbox_display_frame.shape[1] * 0.30),
+                    )
+                    dropbox_display_countdown = seconds_remaining
+
+                cv2.imshow(_LIVE_VIEW_WINDOW, dropbox_display_rendered_frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
                     break
                 if time.monotonic() >= dropbox_display_until:
                     dropbox_display_frame = None
+                    dropbox_display_rendered_frame = None
+                    dropbox_display_countdown = None
                     dropbox_display_until = None
                 else:
                     continue
@@ -379,6 +406,8 @@ def stream_live_view():
                                 shared_url,
                                 frame.shape,
                             )
+                            dropbox_display_rendered_frame = None
+                            dropbox_display_countdown = None
                             dropbox_display_until = (
                                 time.monotonic() + DROPBOX_QR_DISPLAY_SECONDS
                             )

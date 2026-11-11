@@ -27,6 +27,11 @@ access token is kept in memory; the refresh token remains the long-lived
 credential. If the refresh token or app credentials are not configured, the
 upload reports that automatic refresh is unavailable.
 
+Dropbox requests that fail with a connection reset (`Errno 104`) are retried
+twice with short delays. Retries target the same timestamped filename to avoid
+creating duplicate files if Dropbox received an upload before the connection
+was interrupted.
+
 By default, uploads go to `/PhotoBooth/output` in the Dropbox account. Change
 `DROPBOX_UPLOAD_PATH` in `src/photo_booth/config.py` to use another Dropbox
 folder. Create the destination folder in Dropbox before the first upload.

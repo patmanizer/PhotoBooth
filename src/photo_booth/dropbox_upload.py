@@ -1,8 +1,10 @@
 """Upload completed output photos to Dropbox when configured."""
 
 import base64
+import errno
 import json
 import ssl
+import time
 from pathlib import Path
 from threading import Lock
 from urllib.error import HTTPError, URLError
@@ -25,6 +27,7 @@ _DROPBOX_SHARE_URL = (
     "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings"
 )
 _REQUEST_TIMEOUT_SECONDS = 120
+_CONNECTION_RESET_RETRY_DELAYS_SECONDS = (1, 2)
 _DROPBOX_TOKEN_URL = "https://api.dropboxapi.com/oauth2/token"
 _access_token = DROPBOX_ACCESS_TOKEN
 _TOKEN_REFRESH_LOCK = Lock()
@@ -83,6 +86,40 @@ def _read_api_response(opener, request, operation):
     return result
 
 
+def _caused_by_connection_reset(error):
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        if isinstance(error, URLError):
+            error = error.reason
+            continue
+        if isinstance(error, OSError) and error.errno in {
+            errno.ECONNRESET,
+            104,
+        }:
+            return True
+        error = error.__cause__
+    return False
+
+
+def _read_api_response_with_retry(opener, request, operation):
+    for attempt, delay in enumerate(
+        (*_CONNECTION_RESET_RETRY_DELAYS_SECONDS, None),
+        start=1,
+    ):
+        try:
+            return _read_api_response(opener, request, operation)
+        except RuntimeError as exc:
+            if not _caused_by_connection_reset(exc) or delay is None:
+                raise
+            log(
+                f"Dropbox {operation} connection reset; retrying "
+                f"(attempt {attempt + 1}/"
+                f"{len(_CONNECTION_RESET_RETRY_DELAYS_SECONDS) + 1})."
+            )
+            time.sleep(delay)
+
+
 def _is_expired_access_token(error):
     if error.status != 401 or error.error is None:
         return False
@@ -115,7 +152,11 @@ def _refresh_access_token(opener):
         },
         method="POST",
     )
-    result = _read_api_response(opener, request, "access-token refresh")
+    result = _read_api_response_with_retry(
+        opener,
+        request,
+        "access-token refresh",
+    )
     refreshed_token = result.get("access_token")
     if not isinstance(refreshed_token, str) or not refreshed_token:
         raise RuntimeError("Dropbox token refresh returned no access token")
@@ -129,7 +170,7 @@ def _read_authenticated_api_response(opener, request, operation):
         token_used = _access_token
     request.add_header("Authorization", f"Bearer {token_used}")
     try:
-        return _read_api_response(opener, request, operation)
+        return _read_api_response_with_retry(opener, request, operation)
     except _DropboxAPIError as exc:
         if not _is_expired_access_token(exc):
             raise
@@ -140,7 +181,7 @@ def _read_authenticated_api_response(opener, request, operation):
         refreshed_token = _access_token
 
     request.add_header("Authorization", f"Bearer {refreshed_token}")
-    return _read_api_response(opener, request, operation)
+    return _read_api_response_with_retry(opener, request, operation)
 
 
 def _get_existing_shared_link(opener, dropbox_path):
@@ -175,7 +216,10 @@ def _get_existing_shared_link(opener, dropbox_path):
 def upload_output_photo(photo_path: Path) -> str | None:
     """Upload a photo and return its Dropbox shared URL, if configured."""
 
-    if not DROPBOX_ACCESS_TOKEN:
+    if not any((
+            DROPBOX_ACCESS_TOKEN,
+            DROPBOX_REFRESH_TOKEN
+    )):
         return
     if not DROPBOX_UPLOAD_PATH.startswith("/"):
         raise ValueError("DROPBOX_UPLOAD_PATH in config.py must start with '/'")
@@ -191,8 +235,8 @@ def upload_output_photo(photo_path: Path) -> str | None:
             "Dropbox-API-Arg": json.dumps(
                 {
                     "path": dropbox_path,
-                    "mode": "add",
-                    "autorename": True,
+                    "mode": "overwrite",
+                    "autorename": False,
                     "mute": True,
                 }
             ),

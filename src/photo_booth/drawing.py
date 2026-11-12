@@ -254,7 +254,7 @@ def draw_steady_message(frame):
     )
 
 
-def draw_processing_message(frame, prompt: str):
+def draw_processing_message(frame, prompt: str, scale=1):
     """Show a processing prompt and animated spinner."""
 
     height, width = frame.shape[:2]
@@ -264,12 +264,12 @@ def draw_processing_message(frame, prompt: str):
         frame,
         prompt,
         (width // 2, height * 2 // 5),
-        96,
+        96 * scale,
         (255, 255, 255),
         max_width=int(width * 0.82),
     )
     spinner_center = (width // 2, height * 2 // 3)
-    spinner_radius = max(8, min(36, height // 18))
+    spinner_radius = max(8 * scale, min(36 * scale, height // 18))
     spinner_start_angle = int(time.monotonic() * 240) % 360
     cv2.ellipse(
         frame,
@@ -279,6 +279,6 @@ def draw_processing_message(frame, prompt: str):
         spinner_start_angle,
         spinner_start_angle + 270,
         (255, 255, 255),
-        max(2, spinner_radius // 5),
+        max(2 * scale, spinner_radius // 5),
         cv2.LINE_AA,
     )

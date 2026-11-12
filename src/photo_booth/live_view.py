@@ -57,7 +57,7 @@ def _upscale_display_frame(frame, interpolation=cv2.INTER_CUBIC):
     )
 
 
-def _create_dropbox_display_frame(photo_path, shared_url, frame_shape):
+def _create_dropbox_display_frame(photo_path, shared_url, frame_shape, scale=1):
     photo = cv2.imread(str(photo_path))
     if photo is None:
         raise RuntimeError(f"Could not load output photo for QR display: {photo_path}")
@@ -66,6 +66,8 @@ def _create_dropbox_display_frame(photo_path, shared_url, frame_shape):
     qr = cv2.cvtColor(np.asarray(qr_image), cv2.COLOR_RGB2BGR)
 
     height, width = frame_shape[:2]
+    height *= scale
+    width *= scale
     canvas = np.zeros((height, width, 3), dtype=np.uint8)
     margin = max(16, min(height, width) // 30)
     photo_area_width = int(width * 0.62) - 2 * margin
@@ -215,7 +217,7 @@ def stream_live_view():
 
                 cv2.imshow(
                     _LIVE_VIEW_WINDOW,
-                    _upscale_display_frame(dropbox_display_rendered_frame),
+                    dropbox_display_rendered_frame,
                 )
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
@@ -413,11 +415,22 @@ def stream_live_view():
                     else _upscale_display_frame(display_frame),
                 )
             elif processing_future is not None:
-                processing_frame = np.zeros_like(frame)
-                draw_processing_message(processing_frame, processing_prompt)
+                processing_frame = np.zeros(
+                    (
+                        frame.shape[0] * _DISPLAY_SCALE,
+                        frame.shape[1] * _DISPLAY_SCALE,
+                        frame.shape[2],
+                    ),
+                    dtype=frame.dtype,
+                )
+                draw_processing_message(
+                    processing_frame,
+                    processing_prompt,
+                    scale=_DISPLAY_SCALE,
+                )
                 cv2.imshow(
                     _LIVE_VIEW_WINDOW,
-                    _upscale_display_frame(processing_frame),
+                    processing_frame,
                 )
 
             # --------------------------------------------------
@@ -439,6 +452,7 @@ def stream_live_view():
                                 output_path,
                                 shared_url,
                                 frame.shape,
+                                scale=_DISPLAY_SCALE,
                             )
                             dropbox_display_rendered_frame = None
                             dropbox_display_countdown = None

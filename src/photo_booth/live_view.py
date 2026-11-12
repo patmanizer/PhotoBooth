@@ -46,14 +46,14 @@ _LIVE_VIEW_WINDOW = "Live View"
 _DISPLAY_SCALE = 3
 
 
-def _upscale_display_frame(frame):
+def _upscale_display_frame(frame, interpolation=cv2.INTER_CUBIC):
     """Scale a composed frame for display without changing its layout."""
     return cv2.resize(
         frame,
         None,
         fx=_DISPLAY_SCALE,
         fy=_DISPLAY_SCALE,
-        interpolation=cv2.INTER_CUBIC,
+        interpolation=interpolation,
     )
 
 
@@ -249,30 +249,43 @@ def stream_live_view():
                 if frame is None:
                     continue
 
-                if capture_sequence_count in (2, 3):
+                portrait_burst = capture_sequence_count in (2, 3)
+                if portrait_burst:
                     # Keep preview and saved portrait captures framed alike.
                     frame = crop_frame_to_portrait(frame)
+
+                display_frame = (
+                    _upscale_display_frame(
+                        frame,
+                        interpolation=cv2.INTER_LANCZOS4,
+                    )
+                    if portrait_burst
+                    else frame
+                )
 
                 foreground_display_path = None
                 if capture_sequence_count == 1:
                     foreground_display_path = capture_main_foreground_path
-                elif capture_sequence_count in (2, 3):
+                elif portrait_burst:
                     foreground_display_path = foreground_cycler.current_path
 
                 if foreground_display_path is not None:
-                    frame_size = (frame.shape[1], frame.shape[0])
+                    display_frame_size = (
+                        display_frame.shape[1],
+                        display_frame.shape[0],
+                    )
                     if (
                         foreground_display_path != cached_foreground_display_path
-                        or frame_size != cached_frame_size
+                        or display_frame_size != cached_frame_size
                     ):
                         cached_foreground = load_foreground(
                             foreground_display_path,
-                            frame_size,
+                            display_frame_size,
                         )
                         cached_foreground_display_path = foreground_display_path
-                        cached_frame_size = frame_size
+                        cached_frame_size = display_frame_size
 
-                    overlay_foreground(frame, cached_foreground)
+                    overlay_foreground(display_frame, cached_foreground)
 
                 # ------------------------------------------
                 # MediaPipe hand detection.
@@ -311,7 +324,7 @@ def stream_live_view():
                         )
 
                         draw_gesture_progress(
-                            frame,
+                            display_frame,
                             hand_landmarks,
                             0.0,
                             detected_finger_count,
@@ -339,7 +352,7 @@ def stream_live_view():
 
                     if hand_landmarks is not None:
                         draw_gesture_progress(
-                            frame,
+                            display_frame,
                             hand_landmarks,
                             progress,
                             detected_finger_count,
@@ -375,9 +388,10 @@ def stream_live_view():
                                 COUNTDOWN_SECONDS - int(countdown_elapsed),
                             )
                     draw_capture_countdown(
-                        frame,
+                        display_frame,
                         capture_prompt,
                         countdown_number,
+                        scale=_DISPLAY_SCALE if portrait_burst else 1,
                     )
 
                 # ------------------------------------------
@@ -394,7 +408,9 @@ def stream_live_view():
 
                 cv2.imshow(
                     _LIVE_VIEW_WINDOW,
-                    _upscale_display_frame(frame),
+                    display_frame
+                    if portrait_burst
+                    else _upscale_display_frame(display_frame),
                 )
             elif processing_future is not None:
                 processing_frame = np.zeros_like(frame)

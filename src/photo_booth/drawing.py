@@ -199,7 +199,7 @@ def draw_gesture_progress(
         )
 
 
-def draw_capture_countdown(frame, prompt, countdown):
+def draw_capture_countdown(frame, prompt, countdown, scale=1):
     """Display the photo prompt or countdown with a cinematic overlay."""
 
     height, width = frame.shape[:2]
@@ -221,7 +221,7 @@ def draw_capture_countdown(frame, prompt, countdown):
             frame,
             prompt,
             (center_x, height // 2),
-            72,
+            72 * scale,
             white,
             max_width=int(width * 0.82),
         )
@@ -232,7 +232,7 @@ def draw_capture_countdown(frame, prompt, countdown):
         frame,
         str(countdown),
         (center_x, height // 2),
-        300,
+        300 * scale,
         white,
         max_width=int(width * 0.65),
     )

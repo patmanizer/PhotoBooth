@@ -43,6 +43,18 @@ from .hand_detector import create_hand_detector
 from .logging_utils import log
 
 _LIVE_VIEW_WINDOW = "Live View"
+_DISPLAY_SCALE = 3
+
+
+def _upscale_display_frame(frame):
+    """Scale a composed frame for display without changing its layout."""
+    return cv2.resize(
+        frame,
+        None,
+        fx=_DISPLAY_SCALE,
+        fy=_DISPLAY_SCALE,
+        interpolation=cv2.INTER_CUBIC,
+    )
 
 
 def _create_dropbox_display_frame(photo_path, shared_url, frame_shape):
@@ -201,7 +213,10 @@ def stream_live_view():
                     )
                     dropbox_display_countdown = seconds_remaining
 
-                cv2.imshow(_LIVE_VIEW_WINDOW, dropbox_display_rendered_frame)
+                cv2.imshow(
+                    _LIVE_VIEW_WINDOW,
+                    _upscale_display_frame(dropbox_display_rendered_frame),
+                )
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
                     break
@@ -379,12 +394,15 @@ def stream_live_view():
 
                 cv2.imshow(
                     _LIVE_VIEW_WINDOW,
-                    frame,
+                    _upscale_display_frame(frame),
                 )
             elif processing_future is not None:
                 processing_frame = np.zeros_like(frame)
                 draw_processing_message(processing_frame, processing_prompt)
-                cv2.imshow(_LIVE_VIEW_WINDOW, processing_frame)
+                cv2.imshow(
+                    _LIVE_VIEW_WINDOW,
+                    _upscale_display_frame(processing_frame),
+                )
 
             # --------------------------------------------------
             # Keyboard controls.
@@ -452,7 +470,10 @@ def stream_live_view():
 
                 steady_frame = np.zeros_like(frame)
                 draw_steady_message(steady_frame)
-                cv2.imshow(_LIVE_VIEW_WINDOW, steady_frame)
+                cv2.imshow(
+                    _LIVE_VIEW_WINDOW,
+                    _upscale_display_frame(steady_frame),
+                )
                 cv2.waitKey(1)
 
                 time.sleep(0.2)

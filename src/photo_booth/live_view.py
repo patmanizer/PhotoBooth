@@ -498,11 +498,18 @@ def stream_live_view():
                 # Stop live view.
                 live_view_active = False
 
-                steady_frame = np.zeros_like(frame)
-                draw_steady_message(steady_frame)
+                steady_frame = np.zeros(
+                    (
+                        frame.shape[0] * _DISPLAY_SCALE,
+                        frame.shape[1] * _DISPLAY_SCALE,
+                        frame.shape[2],
+                    ),
+                    dtype=frame.dtype,
+                )
+                draw_steady_message(steady_frame, scale=_DISPLAY_SCALE)
                 cv2.imshow(
                     _LIVE_VIEW_WINDOW,
-                    _upscale_display_frame(steady_frame),
+                    steady_frame,
                 )
                 cv2.waitKey(1)
 

@@ -238,7 +238,7 @@ def draw_capture_countdown(frame, prompt, countdown, scale=1):
     )
 
 
-def draw_steady_message(frame):
+def draw_steady_message(frame, scale=1):
     """Show a steadying message while the camera takes a photo."""
 
     height, width = frame.shape[:2]
@@ -248,7 +248,7 @@ def draw_steady_message(frame):
         frame,
         "STEADY!",
         (width // 2, height // 2),
-        180,
+        180 * scale,
         (255, 255, 255),
         max_width=int(width * 0.82),
     )
